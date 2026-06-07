@@ -1,10 +1,11 @@
 {
   "type": "module",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.17.0",
     "cheerio": "^1.2.0",
     "pdf-parse": "^2.4.5",
-    "playwright": "^1.60.0",
-    "puppeteer": "^25.1.0"
+    "puppeteer": "^25.1.0",
+    "zod": "^3.22.0"
   }
 }

@@ -4,92 +4,61 @@ import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextpro
 import { spawn } from "child_process";
 import * as readline from "readline";
 import * as path from "path";
-import * as os from "os";
+import { fileURLToPath } from "url";
 
 // ---------------------------------------------------------------------------
-// Rutas dinamicas - funciona en cualquier PC Windows
+// FIX BUG 1: Rutas relativas al propio archivo, no a ~/legal-hub hardcodeado.
+// Funciona independientemente de donde esté instalado el repo.
 // ---------------------------------------------------------------------------
-const HOME = os.homedir();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT = path.resolve(__dirname, "..");                     // raiz del repo
+const LEGAL_MCP = path.join(ROOT, "servers", "legal-mcp");
+const SAIJ_DIR  = path.join(ROOT, "servers", "saij-mcp");
 const NODE = process.execPath;
-const LEGAL_MCP = path.join(HOME, "legal-hub", "servers", "legal-mcp");
-const SAIJ_DIR = path.join(HOME, "legal-hub", "servers", "saij-mcp");
+
+// ---------------------------------------------------------------------------
+// FIX BUG 6: Todos los conectores heredan NODE_TLS_REJECT_UNAUTHORIZED=0
+// para uniformidad. SCBA y SAIJ también lo necesitan.
+// ---------------------------------------------------------------------------
+const TLS_ENV = { NODE_TLS_REJECT_UNAUTHORIZED: "0" };
+
+// ---------------------------------------------------------------------------
+// Timeouts por conector (ms). SCBA y pjnjuris hacen scraping pesado.
+// FIX BUG 4: timeouts diferenciados en lugar de 15 s fijo para todos.
+// ---------------------------------------------------------------------------
+const TIMEOUTS = {
+    default:  20000,
+    scba:     60000,
+    pjnjuris: 60000,
+    pjn:      30000,
+    saij:     30000,
+};
+
+// ---------------------------------------------------------------------------
+// FIX BUG 7: Evitar nombres dobles como saij__saij_search_* 
+// Si el tool interno ya tiene el prefix del conector como prefijo, lo eliminamos.
+// ---------------------------------------------------------------------------
+function stripInternalPrefix(prefix, toolName) {
+    const candidates = [`${prefix}__`, `${prefix}_`];
+    for (const c of candidates) {
+        if (toolName.startsWith(c)) return toolName.slice(c.length);
+    }
+    return toolName;
+}
 
 const CONNECTORS = [
-    {
-        prefix: "bora",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "bora.js")],
-        cwd: LEGAL_MCP,
-        env: { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
-    },
-    {
-        prefix: "bopba",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "bopba.js")],
-        cwd: LEGAL_MCP,
-        env: { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
-    },
-    {
-        prefix: "infoleg",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "infoleg.js")],
-        cwd: LEGAL_MCP,
-        env: { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
-    },
-    {
-        prefix: "normativapba",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "normativapba.js")],
-        cwd: LEGAL_MCP,
-        env: { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
-    },
-    {
-        prefix: "juba",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "juba.js")],
-        cwd: LEGAL_MCP,
-        env: { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
-    },
-    {
-        prefix: "pjn",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "pjn.js")],
-        cwd: LEGAL_MCP,
-        env: { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
-    },
-    {
-        prefix: "ptn",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "ptn.js")],
-        cwd: LEGAL_MCP,
-        env: { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
-    },
-    {
-        prefix: "pjnjuris",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "pjnjuris.js")],
-        cwd: LEGAL_MCP,
-        env: { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
-    },
-    {
-        prefix: "tfn",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "tfn.js")],
-        cwd: LEGAL_MCP,
-        env: { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
-    },
-    {
-        prefix: "saij",
-        command: NODE,
-        args: [path.join(SAIJ_DIR, "build", "index.js")],
-        cwd: SAIJ_DIR,
-    },
-    {
-        prefix: "scba",
-        command: NODE,
-        args: [path.join(LEGAL_MCP, "build", "scba.js")],
-        cwd: LEGAL_MCP,
-    },
+    { prefix: "bora",         command: NODE, args: [path.join(LEGAL_MCP, "build", "bora.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "bopba",        command: NODE, args: [path.join(LEGAL_MCP, "build", "bopba.js")],        cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "infoleg",      command: NODE, args: [path.join(LEGAL_MCP, "build", "infoleg.js")],      cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "normativapba", command: NODE, args: [path.join(LEGAL_MCP, "build", "normativapba.js")], cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "juba",         command: NODE, args: [path.join(LEGAL_MCP, "build", "juba.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "pjn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "pjn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "pjnjuris",     command: NODE, args: [path.join(LEGAL_MCP, "build", "pjnjuris.js")],     cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "ptn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "ptn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "tfn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "tfn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "saij",         command: NODE, args: [path.join(SAIJ_DIR,  "build", "index.js")],        cwd: SAIJ_DIR,  env: TLS_ENV },
+    { prefix: "scba",         command: NODE, args: [path.join(LEGAL_MCP, "build", "scba.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
 ];
 
 class ChildMcpClient {
@@ -100,6 +69,8 @@ class ChildMcpClient {
     idCounter = 1;
     tools = [];
     ready = false;
+    // FIX BUG 5: flag para saber si el proceso murió en runtime
+    dead = false;
 
     constructor(prefix, config) {
         this.prefix = prefix;
@@ -134,12 +105,25 @@ class ChildMcpClient {
             const txt = d.toString().trim();
             if (txt) process.stderr.write(`[${this.prefix}] ${txt}\n`);
         });
+        // FIX BUG 5: marcar como muerto y limpiar pendientes en lugar de dejarlos colgados
         this.proc.on("exit", (code) => {
+            this.dead = true;
+            this.ready = false;
             process.stderr.write(`[${this.prefix}] proceso terminado (code ${code})\n`);
+            // Rechazar todos los pendientes para que no queden esperando timeout
+            for (const [id, p] of this.pending) {
+                p.reject(new Error(`[${this.prefix}] proceso terminado inesperadamente (code ${code})`));
+            }
+            this.pending.clear();
         });
     }
 
-    send(method, params) {
+    send(method, params, timeoutMs) {
+        // FIX BUG 5: rechazar inmediatamente si el proceso ya murió
+        if (this.dead) {
+            return Promise.reject(new Error(`[${this.prefix}] conector no disponible (proceso terminado)`));
+        }
+        const ms = timeoutMs ?? TIMEOUTS.default;
         return new Promise((resolve, reject) => {
             const id = this.idCounter++;
             const req = { jsonrpc: "2.0", id, method, params: params ?? {} };
@@ -149,13 +133,15 @@ class ChildMcpClient {
             } catch (e) {
                 this.pending.delete(id);
                 reject(e);
+                return;
             }
+            // FIX BUG 4: usar el timeout configurado por conector
             setTimeout(() => {
                 if (this.pending.has(id)) {
                     this.pending.delete(id);
-                    reject(new Error(`[${this.prefix}] timeout en ${method}`));
+                    reject(new Error(`[${this.prefix}] timeout (${ms}ms) en ${method}`));
                 }
-            }, 15000);
+            }, ms);
         });
     }
 
@@ -172,21 +158,27 @@ class ChildMcpClient {
         await this.send("initialize", {
             protocolVersion: "2024-11-05",
             capabilities: { tools: {} },
-            clientInfo: { name: "legal-hub-proxy", version: "1.0.0" },
-        });
+            clientInfo: { name: "legal-hub-proxy", version: "2.1.0" },
+        }, 20000);
         this.notify("notifications/initialized");
-        const result = (await this.send("tools/list", {}));
+        const result = (await this.send("tools/list", {}, 15000));
         this.tools = (result.tools ?? []).map((t) => ({
             ...t,
-            name: `${this.prefix}__${t.name}`,
+            name: `${this.prefix}__${stripInternalPrefix(this.prefix, t.name)}`,
         }));
         this.ready = true;
         process.stderr.write(`[${this.prefix}] ok - ${this.tools.length} tools\n`);
     }
 
     async callTool(prefixedName, args) {
-        const originalName = prefixedName.replace(`${this.prefix}__`, "");
-        return this.send("tools/call", { name: originalName, arguments: args });
+        // FIX BUG 5: verificar que el proceso siga vivo antes de intentar la llamada
+        if (this.dead) {
+            throw new Error(`[${this.prefix}] conector no disponible (proceso terminado)`);
+        }
+        const originalName = prefixedName.slice(`${this.prefix}__`.length);
+        // FIX BUG 4: usar timeout específico para este conector
+        const ms = TIMEOUTS[this.prefix] ?? TIMEOUTS.default;
+        return this.send("tools/call", { name: originalName, arguments: args }, ms);
     }
 
     kill() {
@@ -199,11 +191,12 @@ class ChildMcpClient {
 // ---------------------------------------------------------------------------
 async function main() {
     const server = new Server(
-        { name: "legal-hub", version: "2.0.0" },
+        { name: "legal-hub", version: "2.1.0" },
         { capabilities: { tools: {} } }
     );
 
     process.stderr.write("[legal-hub] iniciando conectores...\n");
+    process.stderr.write(`[legal-hub] ROOT: ${ROOT}\n`);
 
     const clients = [];
     await Promise.allSettled(
@@ -213,7 +206,7 @@ async function main() {
                 await client.initialize();
                 clients.push(client);
             } catch (e) {
-                process.stderr.write(`[${cfg.prefix}] ERROR: ${e.message}\n`);
+                process.stderr.write(`[${cfg.prefix}] ERROR al inicializar: ${e.message}\n`);
             }
         })
     );
@@ -243,7 +236,15 @@ async function main() {
         const client = toolMap.get(name);
         if (!client) {
             return {
-                content: [{ type: "text", text: `Tool "${name}" no encontrada.` }],
+                content: [{ type: "text", text: `Tool "${name}" no encontrada en legal-hub.` }],
+                isError: true,
+            };
+        }
+
+        // FIX BUG 5: verificar liveness antes de llamar
+        if (client.dead) {
+            return {
+                content: [{ type: "text", text: `[${client.prefix}] conector no disponible. El proceso hijo terminó inesperadamente.` }],
                 isError: true,
             };
         }

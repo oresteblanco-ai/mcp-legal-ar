@@ -380,24 +380,9 @@ export function cleanInfoLegHtml(html) {
         .trim();
 }
 /**
- * Searches InfoLEG directly via servicios.infoleg.gob.ar (no Drupal, no captcha).
- * Parses the HTML results page from the official search endpoint.
+ * Parses the HTML results page from InfoLEG's search endpoint.
  */
-async function searchCentralSolr(keys) {
-    // Build search URL using InfoLEG's own search endpoint
-    const query = new URLSearchParams();
-    query.set("texto", keys);
-    query.set("pageSize", "20");
-    query.set("pagina", "1");
-    const url = `https://servicios.infoleg.gob.ar/infolegInternet/buscarNormas.do?${query.toString()}`;
-    const response = await axios.get(url, {
-        httpsAgent,
-        headers: OFFICIAL_HEADERS,
-        responseType: "arraybuffer"
-    });
-    // InfoLEG serves ISO-8859-1
-    const decoder = new TextDecoder("latin1");
-    const html = decoder.decode(response.data);
+function parseSearchResults(html) {
     const $ = cheerio.load(html);
     const results = [];
     // Each result is a table row with links to verNorma.do
@@ -424,6 +409,43 @@ async function searchCentralSolr(keys) {
         });
     });
     return results;
+}
+/**
+ * Searches InfoLEG directly via servicios.infoleg.gob.ar (no Drupal, no captcha).
+ * Intento 1: axios con Referer/Origin. Intento 2: Puppeteer si recibe 403.
+ */
+async function searchCentralSolr(keys) {
+    // Build search URL using InfoLEG's own search endpoint
+    const query = new URLSearchParams();
+    query.set("texto", keys);
+    query.set("pageSize", "20");
+    query.set("pagina", "1");
+    const url = `https://servicios.infoleg.gob.ar/infolegInternet/buscarNormas.do?${query.toString()}`;
+    // Intento 1: axios directo con headers completos
+    try {
+        const response = await axios.get(url, {
+            httpsAgent,
+            headers: {
+                ...OFFICIAL_HEADERS,
+                "Referer": "https://servicios.infoleg.gob.ar/infolegInternet/",
+                "Origin": "https://servicios.infoleg.gob.ar"
+            },
+            responseType: "arraybuffer"
+        });
+        // InfoLEG serves ISO-8859-1
+        const decoder = new TextDecoder("latin1");
+        const html = decoder.decode(response.data);
+        return parseSearchResults(html);
+    }
+    catch (err) {
+        // Si no es 403, propagar el error
+        if (!err.response || err.response.status !== 403)
+            throw err;
+        console.error(`InfoLEG buscarNormas devolvio 403; reintentando con Puppeteer...`);
+    }
+    // Intento 2: Puppeteer (simula navegador real, evita bloqueo 403)
+    const html = await fetchWithPuppeteer(url);
+    return parseSearchResults(html);
 }
 async function fetchWithPuppeteer(url) {
     const browser = await puppeteer.launch({

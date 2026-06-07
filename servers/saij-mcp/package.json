@@ -11,7 +11,7 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.6.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.6.0",
     "node-cache": "^5.1.2",
     "pdf-parse": "^1.1.1",
