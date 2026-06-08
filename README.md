@@ -82,9 +82,7 @@ Abrir el símbolo del sistema (CMD) y ejecutar los siguientes comandos uno por u
 ```
 cd C:\legal-hub
 npm install
-cd servers\legal-mcp
-npm install
-cd ..\..
+npm install --prefix servers\legal-mcp
 ```
 
 ### Paso 3 - Configurar Claude Desktop
