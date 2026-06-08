@@ -98,7 +98,7 @@ C:\Users\TU_USUARIO\AppData\Roaming\Claude\claude_desktop_config.json
 Reemplazar `TU_USUARIO` con el nombre de usuario de Windows. Abrir ese archivo con el Bloc de notas y agregar dentro de `"mcpServers"`:
 
 ```json
-"legal-hub": {
+"mcp-legal-ar": {
   "command": "node",
   "args": ["C:\\legal-hub\\build\\index.js"],
   "env": {
@@ -112,7 +112,7 @@ El archivo completo debería quedar así:
 ```json
 {
   "mcpServers": {
-    "legal-hub": {
+    "mcp-legal-ar": {
       "command": "node",
       "args": ["C:\\legal-hub\\build\\index.js"],
       "env": {
@@ -127,7 +127,7 @@ El archivo completo debería quedar así:
 
 ### Paso 4 - Reiniciar Claude Desktop
 
-Cerrar Claude Desktop completamente: click derecho en el ícono de la bandeja del sistema (esquina inferior derecha) y seleccionar **Salir**. Volver a abrirlo. El conector `legal-hub` debería aparecer en la lista de herramientas disponibles.
+Cerrar Claude Desktop completamente: click derecho en el ícono de la bandeja del sistema (esquina inferior derecha) y seleccionar **Salir**. Volver a abrirlo. El conector `mcp-legal-ar` debería aparecer en la lista de herramientas disponibles.
 
 ---
 
@@ -165,7 +165,7 @@ El hub no registra consultas, no las envía a terceros, no tiene capacidad de ac
 
 ```
 Claude Desktop
-     └── legal-hub (proxy)
+     └── mcp-legal-ar (proxy)
            ├── bora__*         → proceso hijo Node
            ├── bopba__*        → proceso hijo Node
            ├── infoleg__*      → proceso hijo Node

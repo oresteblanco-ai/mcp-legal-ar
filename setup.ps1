@@ -1,11 +1,11 @@
-# setup.ps1 - legal-hub installer para Windows
+# setup.ps1 - mcp-legal-ar installer para Windows
 # Ejecutar desde la carpeta donde extrajiste el ZIP: clic derecho > "Ejecutar con PowerShell"
 
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   legal-hub - Instalacion automatica   " -ForegroundColor Cyan
+Write-Host "   mcp-legal-ar - Instalacion automatica" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -61,7 +61,7 @@ Write-Host "[OK] Node.js $nodeVersion encontrado." -ForegroundColor Green
 # 2. Detectar ubicacion del repo (donde esta este script)
 # -------------------------------------------------------
 $repoPath = $PSScriptRoot
-$entryPoint = Join-Path $repoPath "servers\legal-mcp\build\index.js"
+$entryPoint = Join-Path $repoPath "build\index.js"
 
 Write-Host "[OK] Repositorio encontrado en: $repoPath" -ForegroundColor Green
 
@@ -89,7 +89,6 @@ try {
     $env:PUPPETEER_SKIP_DOWNLOAD = "true"
     & $nodeExe (Join-Path (Split-Path $nodeExe) "node_modules\npm\bin\npm-cli.js") install --prefer-offline 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        # fallback: npm en PATH
         npm install --prefer-offline 2>&1 | Out-Null
     }
 } finally {
@@ -107,18 +106,6 @@ try {
     Pop-Location
 }
 
-# saij-mcp (si existe)
-$saijPath = Join-Path $repoPath "servers\saij-mcp"
-if (Test-Path $saijPath) {
-    Push-Location $saijPath
-    try {
-        Write-Host "  > npm install (saij-mcp)..." -ForegroundColor Gray
-        npm install --prefer-offline 2>&1 | Out-Null
-    } finally {
-        Pop-Location
-    }
-}
-
 Write-Host "[OK] Dependencias instaladas." -ForegroundColor Green
 
 # -------------------------------------------------------
@@ -127,10 +114,8 @@ Write-Host "[OK] Dependencias instaladas." -ForegroundColor Green
 Write-Host ""
 Write-Host "Configurando Claude Desktop..." -ForegroundColor Yellow
 
-# El AppData puede ser un symlink, resolvemos la ruta real
 $roamingClaude = Join-Path $env:APPDATA "Claude"
 
-# Si APPDATA falla por symlink, buscamos en LocalAppData tambien
 $configPath = $null
 $candidates = @(
     (Join-Path $roamingClaude "claude_desktop_config.json"),
@@ -140,7 +125,6 @@ foreach ($c in $candidates) {
     try {
         $dir = Split-Path $c
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-        # Intentar escribir un archivo de prueba
         $testFile = Join-Path $dir ".setup-test"
         [System.IO.File]::WriteAllText($testFile, "test")
         Remove-Item $testFile -Force
@@ -150,13 +134,11 @@ foreach ($c in $candidates) {
 }
 
 if (-not $configPath) {
-    # Fallback: usar el primer candidato de todas formas
     $configPath = $candidates[0]
     $dir = Split-Path $configPath
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
 }
 
-# Leer config existente o crear vacío
 $config = $null
 if (Test-Path $configPath) {
     try {
@@ -172,12 +154,10 @@ if (Test-Path $configPath) {
     $config = [PSCustomObject]@{}
 }
 
-# Asegurar que mcpServers exista
 if (-not $config.PSObject.Properties["mcpServers"]) {
     $config | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
 }
 
-# Inyectar entrada legal-hub
 $hubEntry = [PSCustomObject]@{
     command = $nodeExe
     args    = @($entryPoint)
@@ -185,9 +165,8 @@ $hubEntry = [PSCustomObject]@{
         NODE_TLS_REJECT_UNAUTHORIZED = "0"
     }
 }
-$config.mcpServers | Add-Member -NotePropertyName "legal-hub" -NotePropertyValue $hubEntry -Force
+$config.mcpServers | Add-Member -NotePropertyName "mcp-legal-ar" -NotePropertyValue $hubEntry -Force
 
-# Escribir config
 $json = $config | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($configPath, $json, [System.Text.Encoding]::UTF8)
 
@@ -205,6 +184,6 @@ Write-Host ""
 Write-Host "Proximo paso:" -ForegroundColor Yellow
 Write-Host "  Cerrá Claude Desktop completamente (clic derecho en el icono de la" -ForegroundColor White
 Write-Host "  bandeja del sistema, esquina inferior derecha, y seleccioná Salir)." -ForegroundColor White
-Write-Host "  Volvé a abrirlo. El conector legal-hub aparecera con 168 herramientas." -ForegroundColor White
+Write-Host "  Volvé a abrirlo. El conector mcp-legal-ar aparecera con las herramientas disponibles." -ForegroundColor White
 Write-Host ""
 Read-Host "Presioná Enter para cerrar"

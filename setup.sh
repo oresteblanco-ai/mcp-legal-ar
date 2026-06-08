@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh - legal-hub installer para macOS y Linux
+# setup.sh - mcp-legal-ar installer para macOS y Linux
 # Ejecutar desde la carpeta donde extrajiste el ZIP:
 #   bash setup.sh
 
@@ -7,7 +7,7 @@ set -euo pipefail
 
 echo ""
 echo "========================================"
-echo "   legal-hub - Instalacion automatica   "
+echo "   mcp-legal-ar - Instalacion automatica"
 echo "========================================"
 echo ""
 
@@ -53,7 +53,7 @@ echo "[OK] Node.js $NODE_VERSION encontrado."
 # 2. Detectar ubicacion del repo
 # -------------------------------------------------------
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENTRY_POINT="$REPO_DIR/servers/legal-mcp/build/index.js"
+ENTRY_POINT="$REPO_DIR/build/index.js"
 
 echo "[OK] Repositorio encontrado en: $REPO_DIR"
 
@@ -83,12 +83,6 @@ cd "$REPO_DIR/servers/legal-mcp"
 echo "  > npm install (legal-mcp)..."
 npm install --prefer-offline --silent
 
-if [ -d "$REPO_DIR/servers/saij-mcp" ]; then
-    cd "$REPO_DIR/servers/saij-mcp"
-    echo "  > npm install (saij-mcp)..."
-    npm install --prefer-offline --silent
-fi
-
 cd "$REPO_DIR"
 echo "[OK] Dependencias instaladas."
 
@@ -107,7 +101,6 @@ CONFIG_PATH="$CONFIG_DIR/claude_desktop_config.json"
 
 mkdir -p "$CONFIG_DIR"
 
-# Leer config existente o inicializar
 if [ -f "$CONFIG_PATH" ]; then
     if ! python3 -c "import json; json.load(open('$CONFIG_PATH'))" 2>/dev/null; then
         echo "[AVISO] El config existente tiene errores de formato. Se creara uno nuevo."
@@ -120,7 +113,6 @@ else
     echo '{}' > "$CONFIG_PATH"
 fi
 
-# Mergear con Python (disponible por defecto en macOS y la mayoria de Linux)
 python3 - "$CONFIG_PATH" "$NODE_EXE" "$ENTRY_POINT" <<'PYEOF'
 import json, sys
 
@@ -134,7 +126,7 @@ with open(config_path, "r", encoding="utf-8") as f:
 if "mcpServers" not in config:
     config["mcpServers"] = {}
 
-config["mcpServers"]["legal-hub"] = {
+config["mcpServers"]["mcp-legal-ar"] = {
     "command": node_exe,
     "args": [entry_point],
     "env": {
@@ -159,5 +151,5 @@ echo "========================================"
 echo ""
 echo "Proximo paso:"
 echo "  Cerrá Claude Desktop completamente y volvé a abrirlo."
-echo "  El conector legal-hub aparecera con 168 herramientas disponibles."
+echo "  El conector mcp-legal-ar aparecera con las herramientas disponibles."
 echo ""

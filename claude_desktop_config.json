@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "legal-hub": {
+    "mcp-legal-ar": {
       "command": "node",
-      "args": ["C:\\Users\\Ximena\\legal-hub\\servers\\legal-mcp\\build\\index.js"],
+      "args": ["C:\\Users\\Ximena\\legal-hub\\build\\index.js"],
       "env": {
         "NODE_TLS_REJECT_UNAUTHORIZED": "0"
       }

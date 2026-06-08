@@ -64,11 +64,11 @@ const CONNECTORS = [
     { prefix: "infoleg",      command: NODE, args: [path.join(LEGAL_MCP, "build", "infoleg.js")],      cwd: LEGAL_MCP, env: TLS_ENV },
     { prefix: "normativapba", command: NODE, args: [path.join(LEGAL_MCP, "build", "normativapba.js")], cwd: LEGAL_MCP, env: TLS_ENV },
     { prefix: "juba",         command: NODE, args: [path.join(LEGAL_MCP, "build", "juba.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
-    { prefix: "pjn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "pjn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
-    { prefix: "pjnjuris",     command: NODE, args: [path.join(LEGAL_MCP, "build", "pjnjuris.js")],     cwd: LEGAL_MCP, env: TLS_ENV },
+    // DESHABILITADO - reCAPTCHA obligatorio: { prefix: "pjn",      command: NODE, args: [path.join(LEGAL_MCP, "build", "pjn.js")],      cwd: LEGAL_MCP, env: TLS_ENV },
+    // DESHABILITADO - reCAPTCHA obligatorio: { prefix: "pjnjuris", command: NODE, args: [path.join(LEGAL_MCP, "build", "pjnjuris.js")], cwd: LEGAL_MCP, env: TLS_ENV },
     { prefix: "ptn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "ptn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
     { prefix: "tfn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "tfn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
-    { prefix: "saij",         command: NODE, args: [path.join(SAIJ_DIR,  "build", "index.js")],        cwd: SAIJ_DIR,  env: TLS_ENV },
+    // DESHABILITADO - HTTP 403 anti-bot: { prefix: "saij", command: NODE, args: [path.join(SAIJ_DIR, "build", "index.js")], cwd: SAIJ_DIR, env: TLS_ENV },
     { prefix: "scba",         command: NODE, args: [path.join(LEGAL_MCP, "build", "scba.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
 ];
 
@@ -193,7 +193,7 @@ class ChildMcpClient {
         await this.send("initialize", {
             protocolVersion: "2024-11-05",
             capabilities: { tools: {} },
-            clientInfo: { name: "legal-hub-proxy", version: "2.1.0" },
+            clientInfo: { name: "mcp-legal-ar-proxy", version: "2.1.0" },
         }, 20000);
         this.notify("notifications/initialized");
         const result = (await this.send("tools/list", {}, 15000));
@@ -227,12 +227,12 @@ class ChildMcpClient {
 // ---------------------------------------------------------------------------
 async function main() {
     const server = new Server(
-        { name: "legal-hub", version: "2.1.0" },
+        { name: "mcp-legal-ar", version: "2.1.0" },
         { capabilities: { tools: {} } }
     );
 
-    process.stderr.write("[legal-hub] iniciando conectores...\n");
-    process.stderr.write(`[legal-hub] ROOT: ${ROOT}\n`);
+    process.stderr.write("[mcp-legal-ar] iniciando conectores...\n");
+    process.stderr.write(`[mcp-legal-ar] ROOT: ${ROOT}\n`);
 
     const clients = [];
     await Promise.allSettled(
@@ -256,7 +256,7 @@ async function main() {
         }
     }
 
-    process.stderr.write(`[legal-hub] listo - ${clients.length} conectores, ${allTools.length} tools totales\n`);
+    process.stderr.write(`[mcp-legal-ar] listo - ${clients.length} conectores, ${allTools.length} tools totales\n`);
 
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
         tools: allTools.map((t) => ({
@@ -272,7 +272,7 @@ async function main() {
         const client = toolMap.get(name);
         if (!client) {
             return {
-                content: [{ type: "text", text: `Tool "${name}" no encontrada en legal-hub.` }],
+                content: [{ type: "text", text: `Tool "${name}" no encontrada en mcp-legal-ar.` }],
                 isError: true,
             };
         }
@@ -319,10 +319,10 @@ async function main() {
 
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    process.stderr.write("[legal-hub] conectado y escuchando\n");
+    process.stderr.write("[mcp-legal-ar] conectado y escuchando\n");
 }
 
 main().catch((e) => {
-    process.stderr.write(`[legal-hub] error fatal: ${e.message}\n`);
+    process.stderr.write(`[mcp-legal-ar] error fatal: ${e.message}\n`);
     process.exit(1);
 });
