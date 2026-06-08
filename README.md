@@ -77,13 +77,15 @@ Hacer clic en el botón verde **Code** arriba a la derecha y seleccionar **Downl
 
 ### Paso 2 - Instalar dependencias
 
-Abrir el símbolo del sistema (CMD) y ejecutar los siguientes comandos uno por uno (reemplazar `C:\legal-hub` con la ruta donde extrajiste el ZIP):
+Abrir el símbolo del sistema (CMD) y ejecutar:
 
 ```
 cd C:\legal-hub
 npm install
 npm install --prefix servers\legal-mcp
 ```
+
+> Si extrajiste el ZIP en otra carpeta, reemplazá `C:\legal-hub` por esa ruta.
 
 ### Paso 3 - Configurar Claude Desktop
 
