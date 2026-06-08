@@ -487,31 +487,6 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_obtener_estadisticas",
-        "Obtiene estadisticas del sistema del Tribunal Fiscal de la Nacion.",
-        {},
-        async () => {
-            try {
-                const apiBase = await resolveApiBase();
-                const response = await axiosClient.get(`${apiBase}/searchStats`, {
-                    timeout: API_TIMEOUT_MS,
-                    headers: {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        "Referer": "https://jurisprudenciatfn.mecon.gob.ar/"
-                    }
-                });
-                const stats = response.data;
-                let md = `# TFN - Estadisticas\n\n`;
-                for (const [key, value] of Object.entries(stats)) {
-                    md += `- **${key}:** ${value}\n`;
-                }
-                return { content: [{ type: "text", text: md }] };
-            } catch (error) {
-                return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
-            }
-        }
-    );
-
     server.tool("tfn_obtener_filtros",
         "Obtiene los filtros disponibles para busqueda en el TFN (tribunales, salas, vocalias, competencias).",
         {},

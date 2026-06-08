@@ -33,7 +33,7 @@ Sin este hub, instalar cada conector por separado requeriría configurar múltip
 | 4 | **Normativa PBA** | Legislación provincial de Buenos Aires | 9 | [voftec/normativapba-mcp](https://github.com/voftec/normativapba-mcp) |
 | 5 | **JUBA** | Jurisprudencia SCBA y cámaras PBA | 21 | [voftec/juba-mcp](https://github.com/voftec/juba-mcp) |
 | 6 | **PTN** | Dictámenes de la Procuración del Tesoro | 22 | [voftec/ptn-mcp](https://github.com/voftec/ptn-mcp) |
-| 7 | **TFN** | Tribunal Fiscal de la Nación | 16 | [voftec/tfn-mcp](https://github.com/voftec/tfn-mcp) |
+| 7 | **TFN** | Tribunal Fiscal de la Nación | 15 | [voftec/tfn-mcp](https://github.com/voftec/tfn-mcp) |
 | 8 | **SCBA** | Sentencias y resoluciones de la Suprema Corte de Buenos Aires | 4 | [FacundoEmanuel/scba-mcp-server](https://github.com/FacundoEmanuel/scba-mcp-server) |
 
 ### 🔧 En desarrollo
