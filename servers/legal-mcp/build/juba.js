@@ -27,40 +27,64 @@ function parseSumarios(html) {
         statsVoces ? statsVoces : '',
         statsFallo ? statsFallo : '',
     ].filter(Boolean).join(' | ');
-    // Iterar cada card de resultado
-    $('div.card').each((cardIdx, card) => {
-        // Posición (ej. "Resultado: 1 de 1245")
-        const posicion = $(`#cphMainContent_RepeaterDatosResultados_lblCantidad_${cardIdx}`).text().trim();
+    // FIX: JUBA usa ASP.NET WebForms con RepeaterDatosResultados.
+    // El DOM real NO usa div.card — itera con IDs dinámicos tipo
+    // cphMainContent_RepeaterDatosResultados_lblCantidad_0, _1, _2, ...
+    // Loop numérico hasta que el primer elemento del repeater no exista.
+    let cardIdx = 0;
+    while (true) {
+        const lblCantidad = $(`#cphMainContent_RepeaterDatosResultados_lblCantidad_${cardIdx}`);
+        // Si no existe este ID, no hay más resultados
+        if (lblCantidad.length === 0) break;
+        const posicion = lblCantidad.text().trim();
+        // Nro de sumario: buscar lnkAcumular con sufijo numérico del índice
         let nroSumario = '';
-        const acumularId = $(card).find('[id*="lnkAcumular"]').attr('id') || '';
-        if (acumularId) {
-            const num = acumularId.replace('lnkAcumular', '');
-            nroSumario = `B${num}`;
+        const acumularEl = $(`[id$="lnkAcumular_${cardIdx}"], [id*="lnkAcumular"][id$="${cardIdx}"]`).first();
+        if (acumularEl.length) {
+            const acumId = acumularEl.attr('id') || '';
+            const numMatch = acumId.match(/(\d+)$/);
+            if (numMatch) nroSumario = `B${numMatch[1]}`;
         }
+        // Materia: buscar en el contexto del bloque del repeater por índice
+        // Usamos el contenedor padre del lblCantidad como ancla
+        const rowContainer = lblCantidad.closest('tr, div, td').parent();
         let materia = '';
-        $(card).find('h2, h3, span.materia, strong').each((_, el) => {
-            const t = $(el).text().trim();
-            if (t === t.toUpperCase() && t.length > 3 && t.length < 50 && !t.match(/^\d/)) {
-                materia = t;
-                return false;
-            }
-        });
-        if (!materia) {
-            const cardText = $(card).find('.card-header, .panel-heading, h4, h5').first().text().trim();
-            if (cardText)
-                materia = cardText;
+        // Intentar materia desde span/label con sufijo _lblMateria_N
+        const lblMateria = $(`[id$="_lblMateria_${cardIdx}"], [id$="lblMateria${cardIdx}"]`).first();
+        if (lblMateria.length) {
+            materia = lblMateria.text().trim();
         }
-        const voces = $(card).find('span[id$="lblVoz"]').text().trim()
+        if (!materia) {
+            // Fallback: buscar texto en mayúsculas dentro del bloque
+            rowContainer.find('h2, h3, h4, span, strong').each((_, el) => {
+                const t = $(el).text().trim();
+                if (t === t.toUpperCase() && t.length > 3 && t.length < 60 && !t.match(/^\d/) && !t.match(/^(RESULTADO|BUSQUEDA)/i)) {
+                    materia = t;
+                    return false;
+                }
+            });
+        }
+        // Voces: span con id que termina en lblVoz_N
+        const voces = $(`[id$="lblVoz_${cardIdx}"], [id$="lblVoz${cardIdx}"]`).text().trim()
             .replace(/\s*\|\s*/g, ' | ')
             .trim();
+        // Texto del sumario: span con id que contiene lblTexto o lblSumario con sufijo N
         let textoSumario = '';
-        $(card).find('p, div.texto-sumario, span[id*="lblTexto"]').each((_, el) => {
-            const t = $(el).text().replace(/\s+/g, ' ').trim();
-            if (t.length > 80 && !t.startsWith('CC') && !t.startsWith('TC') && !t.startsWith('SC') && !t.startsWith('TT')) {
-                if (t.length > textoSumario.length)
-                    textoSumario = t;
-            }
-        });
+        const lblTexto = $(`[id*="lblTexto"][id$="_${cardIdx}"], [id*="lblSumario"][id$="_${cardIdx}"]`).first();
+        if (lblTexto.length) {
+            textoSumario = lblTexto.text().replace(/\s+/g, ' ').trim();
+        }
+        if (!textoSumario) {
+            // Fallback: buscar párrafos largos en el bloque
+            rowContainer.find('p, span').each((_, el) => {
+                const t = $(el).text().replace(/\s+/g, ' ').trim();
+                if (t.length > 80 && !t.startsWith('CC') && !t.startsWith('TC') && !t.startsWith('SC') && !t.startsWith('TT')) {
+                    if (t.length > textoSumario.length)
+                        textoSumario = t;
+                }
+            });
+        }
+        // Fallos relacionados: paneles del repeater con sufijo _N
         const fallos = [];
         const panelIds = [
             `cphMainContent_RepeaterDatosResultados_PanelFallosSinCoincidencia_${cardIdx}`,
@@ -68,6 +92,7 @@ function parseSumarios(html) {
         ];
         panelIds.forEach(panelId => {
             const panel = $(`#${panelId}`);
+            if (!panel.length) return;
             panel.find('p').each((_, p) => {
                 const pText = $(p).text().replace(/\s+/g, ' ').trim();
                 if (!pText || pText.length < 10)
@@ -114,7 +139,10 @@ function parseSumarios(html) {
             });
         });
         sumarios.push({ posicion, materia, nroSumario, voces, texto: textoSumario, fallos });
-    });
+        cardIdx++;
+        // Límite de seguridad: nunca más de 200 resultados por página
+        if (cardIdx > 200) break;
+    }
     return { sumarios, stats };
 }
 /** Formatea sumarios en el estilo visual de JUBA */
@@ -161,24 +189,52 @@ function formatSumarios(sumarios, stats) {
 // ─────────────────────────────────────────────────────────────────
 async function searchRapida(query, materia = "Todos") {
     const url = "https://juba.scba.gov.ar/Buscar.aspx";
-    const resGet = await axios.get(url, { httpsAgent });
-    const $ = cheerio.load(resGet.data);
-    const cookies = resGet.headers["set-cookie"];
-    const params = new URLSearchParams();
-    $('form#form1 input').each((_, el) => {
-        const name = $(el).attr('name');
-        if (name)
-            params.append(name, $(el).attr('value') || '');
+    const resGet = await axios.get(url, {
+        httpsAgent,
+        headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "es-AR,es;q=0.9",
+        }
     });
+    const $ = cheerio.load(resGet.data);
+    // Extraer TODAS las cookies de sesion
+    const rawCookies = resGet.headers["set-cookie"] || [];
+    const cookieStr = rawCookies.map(c => c.split(';')[0]).join('; ');
+    const params = new URLSearchParams();
+    // Campos hidden del formulario (viewstate, etc)
+    $('form#form1 input[type="hidden"]').each((_, el) => {
+        const name = $(el).attr('name');
+        if (name) params.append(name, $(el).attr('value') || '');
+    });
+    // Campos visibles con sus valores por defecto
+    $('form#form1 input[type="text"], form#form1 input[type="radio"]:checked, form#form1 input[type="checkbox"]:checked').each((_, el) => {
+        const name = $(el).attr('name');
+        if (name) params.append(name, $(el).attr('value') || '');
+    });
+    // Selects con su valor seleccionado
+    $('form#form1 select').each((_, el) => {
+        const name = $(el).attr('name');
+        if (!name) return;
+        const selected = $(el).find('option[selected]').attr('value') ?? $(el).find('option').first().attr('value') ?? '';
+        params.set(name, selected);
+    });
+    // Campos de la busqueda rapida
     params.set("ctl00$cphMainContent$txtExpresionBusquedaRapida", query);
-    params.set("ctl00$cphMainContent$btnUnicaBusqueda", "Buscar");
     params.set("ctl00$cphMainContent$ddlMateria", materia);
+    // El boton de submit en WebForms: su name debe estar en el POST
+    params.set("ctl00$cphMainContent$btnUnicaBusqueda", "Buscar");
     const resPost = await axios.post(url, params.toString(), {
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",
             "Referer": url,
-            "Cookie": cookies ? cookies.join("; ") : "",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "Origin": "https://juba.scba.gov.ar",
+            "Cookie": cookieStr,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "es-AR,es;q=0.9",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
         },
         httpsAgent,
         maxRedirects: 5
@@ -187,9 +243,17 @@ async function searchRapida(query, materia = "Todos") {
 }
 async function searchIntegral(opts) {
     const url = "https://juba.scba.gov.ar/Busquedas.aspx";
-    const resGet = await axios.get(url, { httpsAgent });
+    const resGet = await axios.get(url, {
+        httpsAgent,
+        headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "es-AR,es;q=0.9",
+        }
+    });
     const $ = cheerio.load(resGet.data);
-    const cookies = resGet.headers["set-cookie"];
+    const rawCookies = resGet.headers["set-cookie"] || [];
+    const cookieStr = rawCookies.map(c => c.split(';')[0]).join('; ');
     const params = new URLSearchParams();
     $('form#form1 input[type="hidden"]').each((_, el) => {
         const name = $(el).attr('name');
@@ -234,8 +298,13 @@ async function searchIntegral(opts) {
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",
             "Referer": url,
-            "Cookie": cookies ? cookies.join("; ") : "",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            "Origin": "https://juba.scba.gov.ar",
+            "Cookie": cookieStr,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "es-AR,es;q=0.9",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
         },
         httpsAgent
     });
@@ -579,7 +648,7 @@ export function registerAllTools(server) {
 // INICIALIZACIÓN
 // ─────────────────────────────────────────────────────────────────
 registerAllTools(server);
-if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME && process.env.NODE_ENV !== "production") {
+if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME) {
     const transport = new StdioServerTransport();
     server.connect(transport).catch((err) => {
         console.error("Server connection failed", err);

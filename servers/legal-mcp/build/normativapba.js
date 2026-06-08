@@ -1001,11 +1001,17 @@ server.tool("mapa_normativo_tema", "Construye un árbol jerárquico completo de 
         };
     }
 });
-// Conectar con stdio
-const transport = new StdioServerTransport();
-server.connect(transport).catch((err) => {
-    console.error("Server connection failed", err);
-    process.exit(1);
-});
-console.error("Argentina Normativa PBA MCP Server is running.");
+// Guard de entorno identico al resto del proyecto (bora.js, tfn.js, etc.)
+if (
+    typeof process !== "undefined" &&
+    !process.env.VERCEL &&
+    !process.env.NEXT_RUNTIME
+) {
+    const transport = new StdioServerTransport();
+    server.connect(transport).catch((err) => {
+        process.stderr.write(`[normativapba] error fatal: ${err.message}\n`);
+        process.exit(1);
+    });
+    process.stderr.write("[normativapba] conectado y escuchando\n");
+}
 //# sourceMappingURL=normativapba.js.map

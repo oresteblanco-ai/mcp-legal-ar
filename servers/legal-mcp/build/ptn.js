@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { pathToFileURL } from "url";
+import { pathToFileURL as _pathToFileURL } from "url";
 import { ptnPost } from "./ptn-http.js";
 import crypto from "crypto";
 const PTN_API_URL = "https://api.ptn.gob.ar";
@@ -1550,10 +1550,7 @@ export const server = new McpServer({
     version: SERVER_VERSION,
 });
 registerAllTools(server);
-const isDirectCliRun = typeof process !== "undefined" &&
-    Boolean(process.argv[1]) &&
-    import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isDirectCliRun && !process.env.VERCEL && !process.env.NEXT_RUNTIME) {
+if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME) {
     const transport = new StdioServerTransport();
     server.connect(transport).catch((error) => {
         console.error("Fatal error running PTN MCP server:", error);

@@ -7,12 +7,22 @@ import { z } from "zod";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import https from "https";
+import { fileURLToPath } from "url";
+
+// FIX: anclar rutas de caché al directorio del módulo, no a process.cwd().
+// process.cwd() varía según el cwd del proceso hijo spawneado por el hub.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const axiosClient = axios.create({ httpsAgent });
 // Tasas updater functions
 const PDF_URL = 'https://tasador.boletinoficial.gba.gob.ar/pdfs/Flyer%20Tasas%20BO.pdf';
-const CACHE_FILE = path.join(process.cwd(), 'data/tasas-cache.json');
-const PDF_HASH_FILE = path.join(process.cwd(), 'data/pdf-hash.txt');
+const CACHE_FILE = path.join(__dirname, '../data/tasas-cache.json');
+const PDF_HASH_FILE = path.join(__dirname, '../data/pdf-hash.txt');
 // Ensure data directory exists
-const dataDir = path.join(process.cwd(), 'data');
+const dataDir = path.join(__dirname, '../data');
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
@@ -71,13 +81,13 @@ function parseTasasFromPDF(text) {
         let currentPrices = [];
         let currentRanges = [];
         for (const line of lines) {
-            if (line.includes('Tr├ímite Normal') || line.includes('72 hs')) {
+            if (line.includes('Trámite Normal') || line.includes('72 hs')) {
                 currentType = 'normal';
                 currentPrices = [];
                 currentRanges = [];
                 continue;
             }
-            if (line.includes('Tr├ímite Urgente') || line.includes('24 hs')) {
+            if (line.includes('Trámite Urgente') || line.includes('24 hs')) {
                 currentType = 'urgente';
                 currentPrices = [];
                 currentRanges = [];
@@ -100,7 +110,7 @@ function parseTasasFromPDF(text) {
         // Map prices to ranges for each type
         if (currentType === 'normal' || tasas["Avisos por palabras"].normal.length === 0) {
             // Process normal section
-            const normalLines = lines.slice(lines.indexOf('Tr├ímite Normal') + 1, lines.indexOf('Tr├ímite Urgente'));
+            const normalLines = lines.slice(lines.indexOf('Trámite Normal') + 1, lines.indexOf('Trámite Urgente'));
             const normalPrices = [];
             const normalRanges = [];
             normalLines.forEach(line => {
@@ -123,7 +133,7 @@ function parseTasasFromPDF(text) {
             }
         }
         // Process urgent section - reuse ranges from normal section
-        const urgentStartIndex = lines.indexOf('Tr├ímite Urgente');
+        const urgentStartIndex = lines.indexOf('Trámite Urgente');
         if (urgentStartIndex >= 0) {
             const urgentLines = lines.slice(urgentStartIndex + 1);
             const urgentPrices = [];
@@ -145,12 +155,12 @@ function parseTasasFromPDF(text) {
     }
     // Parse OTROS AVISOS
     // Structure: 3 normal prices, category labels, type labels, 3 urgent prices
-    // Note: Otras Sociedades and Constituci├│n de SAS have the same rates
+    // Note: Otras Sociedades and Constitución de SAS have the same rates
     const otrosSection = text.match(/OTROS AVISOS([\s\S]*?)(?=TASAS ADMINISTRATIVAS|$)/);
     if (otrosSection) {
         const sectionText = otrosSection[1];
         const lines = sectionText.split('\n').map(l => l.trim()).filter(l => l);
-        const categories = ['Balances', 'Entidades Financieras', 'Otras Sociedades', 'Constituci├│n de SAS'];
+        const categories = ['Balances', 'Entidades Financieras', 'Otras Sociedades', 'Constitución de SAS'];
         categories.forEach(cat => {
             tasas[cat] = { normal: {}, urgente: {} };
         });
@@ -168,17 +178,17 @@ function parseTasasFromPDF(text) {
             tasas["Balances"].normal = prices[0];
             tasas["Entidades Financieras"].normal = prices[1];
             tasas["Otras Sociedades"].normal = prices[2];
-            tasas["Constituci├│n de SAS"].normal = prices[2]; // Same as Otras Sociedades
+            tasas["Constitución de SAS"].normal = prices[2]; // Same as Otras Sociedades
             tasas["Balances"].urgente = prices[3];
             tasas["Entidades Financieras"].urgente = prices[4];
             tasas["Otras Sociedades"].urgente = prices[5];
-            tasas["Constituci├│n de SAS"].urgente = prices[5]; // Same as Otras Sociedades
+            tasas["Constitución de SAS"].urgente = prices[5]; // Same as Otras Sociedades
         }
     }
     return tasas;
 }
 async function downloadPDF() {
-    const response = await axios.get(PDF_URL, {
+    const response = await axiosClient.get(PDF_URL, {
         responseType: 'arraybuffer',
         timeout: 30000
     });
@@ -274,13 +284,13 @@ export const server = new McpServer({
     version: "1.0.0",
 });
 export const registerAllTools = (server) => {
-    server.tool("buscar_boletin", "Busca boletines oficiales usando la p├ígina de b├║squeda del BOPBA con filtros avanzados", {
-        words: z.string().optional().describe("Palabras clave para la b├║squeda (search[words])"),
+    server.tool("buscar_boletin", "Busca boletines oficiales usando la página de búsqueda del BOPBA con filtros avanzados", {
+        words: z.string().optional().describe("Palabras clave para la búsqueda (search[words])"),
         date_gteq: z.string().optional().describe("Fecha desde en formato YYYY-MM-DD (search[date_gteq])"),
         date_lteq: z.string().optional().describe("Fecha hasta en formato YYYY-MM-DD (search[date_lteq])"),
-        section: z.enum(["OFICIAL", "JUDICIAL", "JURISPRUDENCIA", "SUPLEMENTO"]).optional().describe("Secci├│n del bolet├¡n para filtrar"),
-        sort: z.enum(["by_match_desc", "by_date_desc", "by_date_asc"]).optional().describe("Ordenamiento: por coincidencia, m├ís recientes, menos recientes"),
-        page: z.number().optional().describe("N├║mero de p├ígina para paginaci├│n de resultados"),
+        section: z.enum(["OFICIAL", "JUDICIAL", "JURISPRUDENCIA", "SUPLEMENTO", "SUPLEMENTO 1"]).optional().describe("Sección del boletín para filtrar"),
+        sort: z.enum(["by_match_desc", "by_date_desc", "by_date_asc"]).optional().describe("Ordenamiento: por coincidencia, más recientes, menos recientes"),
+        page: z.number().optional().describe("Número de página para paginación de resultados"),
     }, async (args) => {
         try {
             const queryParams = new URLSearchParams();
@@ -296,9 +306,9 @@ export const registerAllTools = (server) => {
                 queryParams.append("search[sort]", String(args.sort));
             if (args?.page)
                 queryParams.append("page", String(args.page));
-            queryParams.append("utf8", "Ô£ô");
+            queryParams.append("utf8", "✔");
             const url = `https://boletinoficial.gba.gob.ar/buscar?${queryParams.toString()}`;
-            const response = await axios.get(url, {
+            const response = await axiosClient.get(url, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -355,7 +365,7 @@ export const registerAllTools = (server) => {
                 const activePage = $pagination.find('.active a').text();
                 if (activePage)
                     pagination.currentPage = parseInt(activePage);
-                const lastLink = $pagination.find('a:contains("├Ültima")').attr('href');
+                const lastLink = $pagination.find('a:contains("Última")').attr('href');
                 if (lastLink) {
                     const match = lastLink.match(/page=(\d+)/);
                     if (match)
@@ -375,13 +385,13 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.tool("descargar_seccion", "Descarga y extrae el texto del PDF de una secci├│n espec├¡fica del BOPBA", {
-        id: z.string().describe("ID de la secci├│n a descargar"),
+    server.tool("descargar_seccion", "Descarga y extrae el texto del PDF de una sección específica del BOPBA", {
+        id: z.string().describe("ID de la sección a descargar"),
     }, async (args) => {
         try {
             const id = String(args?.id);
             const url = `https://boletinoficial.gba.gob.ar/secciones/${id}/descargar`;
-            const response = await axios.get(url, {
+            const response = await axiosClient.get(url, {
                 responseType: "arraybuffer",
                 headers: {
                     "User-Agent": "Mozilla/5.0",
@@ -401,10 +411,10 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.tool("listar_agencias", "Obtiene el listado completo de agencias del BOPBA con informaci├│n de contacto", {}, async () => {
+    server.tool("listar_agencias", "Obtiene el listado completo de agencias del BOPBA con información de contacto", {}, async () => {
         try {
             const url = "https://boletinoficial.gba.gob.ar/agencias";
-            const response = await axios.get(url, {
+            const response = await axiosClient.get(url, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
@@ -440,10 +450,10 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.tool("listar_ediciones_anteriores", "Lista ediciones anteriores del bolet├¡n con filtros de fecha y paginaci├│n", {
+    server.tool("listar_ediciones_anteriores", "Lista ediciones anteriores del boletín con filtros de fecha y paginación", {
         date_gteq: z.string().optional().describe("Fecha desde en formato YYYY-MM-DD"),
         date_lteq: z.string().optional().describe("Fecha hasta en formato YYYY-MM-DD"),
-        page: z.number().optional().describe("N├║mero de p├ígina (por defecto 1)"),
+        page: z.number().optional().describe("Número de página (por defecto 1)"),
     }, async (args) => {
         try {
             const queryParams = new URLSearchParams();
@@ -454,7 +464,7 @@ export const registerAllTools = (server) => {
             if (args?.page)
                 queryParams.append("page", String(args.page));
             const url = `https://boletinoficial.gba.gob.ar/ediciones-anteriores?${queryParams.toString()}`;
-            const response = await axios.get(url, {
+            const response = await axiosClient.get(url, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
@@ -485,7 +495,7 @@ export const registerAllTools = (server) => {
                 const activePage = $pagination.find('.active a').text();
                 if (activePage)
                     pagination.currentPage = parseInt(activePage);
-                const lastLink = $pagination.find('a:contains("├Ültima")').attr('href');
+                const lastLink = $pagination.find('a:contains("Última")').attr('href');
                 if (lastLink) {
                     const match = lastLink.match(/page=(\d+)/);
                     if (match)
@@ -505,12 +515,12 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.tool("calcular_tarifa", "Calcula una aproximaci├│n de la tarifa de publicaci├│n en el BOPBA bas├índose en las tasas oficiales del flyer. NOTA: Este c├ílculo es una aproximaci├│n. Para obtener el precio exacto, c├│digos QR de pago y enlaces de pago oficiales, debe utilizar el simulador web: https://tasador.boletinoficial.gba.gob.ar/", {
-        categoria: z.enum(["Edictos sucesorios", "Avisos por palabras", "Balances", "Entidades Financieras", "Otras Sociedades", "Constituci├│n de SAS"]).describe("Categor├¡a de publicaci├│n seg├║n el flyer de tasas oficial"),
+    server.tool("calcular_tarifa", "Calcula una aproximación de la tarifa de publicación en el BOPBA basándose en las tasas oficiales del flyer. NOTA: Este cálculo es una aproximación. Para obtener el precio exacto, códigos QR de pago y enlaces de pago oficiales, debe utilizar el simulador web: https://tasador.boletinoficial.gba.gob.ar/", {
+        categoria: z.enum(["Edictos sucesorios", "Avisos por palabras", "Balances", "Entidades Financieras", "Otras Sociedades", "Constitución de SAS"]).describe("Categoría de publicación según el flyer de tasas oficial"),
         texto: z.string().optional().describe("Texto a publicar (requerido para 'Avisos por palabras' para contar palabras)"),
-        dias: z.enum(["1", "3"]).optional().describe("Cantidad de d├¡as (requerido para 'Edictos sucesorios': 1 o 3 d├¡as)"),
-        urgencia: z.enum(["Normal (72 hs.)", "Urgente (24 hs.)"]).optional().describe("Tipo de tr├ímite (por defecto: Normal 72 hs.)"),
-        actualizar: z.boolean().optional().describe("Forzar actualizaci├│n desde PDF oficial (por defecto: false)"),
+        dias: z.enum(["1", "3"]).optional().describe("Cantidad de días (requerido para 'Edictos sucesorios': 1 o 3 días)"),
+        urgencia: z.enum(["Normal (72 hs.)", "Urgente (24 hs.)"]).optional().describe("Tipo de trámite (por defecto: Normal 72 hs.)"),
+        actualizar: z.boolean().optional().describe("Forzar actualización desde PDF oficial (por defecto: false)"),
     }, async (args) => {
         try {
             const categoria = args.categoria;
@@ -524,13 +534,13 @@ export const registerAllTools = (server) => {
                 urgencia,
                 calculo: null,
                 nota: "",
-                advertencia: "ÔÜá´©Å IMPORTANTE: Este c├ílculo es una APROXIMACI├ôN basada en el flyer de tasas oficial. Para obtener el precio exacto, c├│digos QR de pago y enlaces de pago oficiales, debe utilizar el simulador web: https://tasador.boletinoficial.gba.gob.ar/"
+                advertencia: "⚠️ IMPORTANTE: Este cálculo es una APROXIMACIÓN basada en el flyer de tasas oficial. Para obtener el precio exacto, códigos QR de pago y enlaces de pago oficiales, debe utilizar el simulador web: https://tasador.boletinoficial.gba.gob.ar/"
             };
             if (categoria === "Edictos sucesorios") {
                 if (!args.dias) {
                     return {
                         isError: true,
-                        content: [{ type: "text", text: "Error: Para 'Edictos sucesorios' debe especificar el par├ímetro 'dias' como '1' o '3'." }],
+                        content: [{ type: "text", text: "Error: Para 'Edictos sucesorios' debe especificar el parámetro 'dias' como '1' o '3'." }],
                     };
                 }
                 const tasa = tasasOficiales[categoria][esUrgente ? "urgente" : "normal"][args.dias];
@@ -544,7 +554,7 @@ export const registerAllTools = (server) => {
                 if (!args.texto) {
                     return {
                         isError: true,
-                        content: [{ type: "text", text: "Error: Para 'Avisos por palabras' debe proporcionar el par├ímetro 'texto'." }],
+                        content: [{ type: "text", text: "Error: Para 'Avisos por palabras' debe proporcionar el parámetro 'texto'." }],
                     };
                 }
                 const wordCount = args.texto.split(/\s+/).filter(w => w.length > 0).length;
@@ -560,18 +570,24 @@ export const registerAllTools = (server) => {
                 }
                 else {
                     resultado.calculo = null;
-                    resultado.nota = "Para avisos de m├ís de 200 palabras o para m├ís de un d├¡a de publicaci├│n se aconseja usar el Simulador de costos de Publicaci├│n disponible en la web: https://tasador.boletinoficial.gba.gob.ar/";
+                    resultado.nota = "Para avisos de más de 200 palabras o para más de un día de publicación se aconseja usar el Simulador de costos de Publicación disponible en la web: https://tasador.boletinoficial.gba.gob.ar/";
                 }
             }
             else {
-                // Balances, Entidades Financieras, Otras Sociedades, Constituci├│n de SAS
-                const tasa = tasasOficiales[categoria][esUrgente ? "urgente" : "normal"];
+                // Balances, Entidades Financieras, Otras Sociedades, Constitución de SAS
+                const tasa = tasasOficiales[categoria]?.[esUrgente ? "urgente" : "normal"];
+                if (!tasa) {
+                    return {
+                        isError: true,
+                        content: [{ type: "text", text: `Error: No se encontraron tasas para la categoría "${categoria}". Intente con actualizar: true para refrescar los datos.` }],
+                    };
+                }
                 resultado.calculo = {
                     valor_ut: tasa.ut,
                     valor_ars: tasa.ars
                 };
             }
-            resultado.fuente = "Flyer de Tasas Oficial BOPBA (Art. 57 Ley 15.558) - APROXIMACI├ôN";
+            resultado.fuente = "Flyer de Tasas Oficial BOPBA (Art. 57 Ley 15.558) - APROXIMACIÓN";
             resultado.url_verificacion = "https://tasador.boletinoficial.gba.gob.ar/";
             resultado.url_pago_oficial = "https://tasador.boletinoficial.gba.gob.ar/";
             resultado.version_tasas = tasasData.version;
@@ -591,7 +607,7 @@ export const registerAllTools = (server) => {
         }
     });
     server.tool("actualizar_tasas", "Verifica y actualiza las tasas desde el PDF oficial del BOPBA si hay cambios", {
-        forzar: z.boolean().optional().describe("Forzar actualizaci├│n incluso si el PDF no cambi├│ (por defecto: false)"),
+        forzar: z.boolean().optional().describe("Forzar actualización incluso si el PDF no cambió (por defecto: false)"),
     }, async (args) => {
         try {
             const hasUpdates = await checkForUpdates();
@@ -601,7 +617,7 @@ export const registerAllTools = (server) => {
                     content: [{
                             type: "text",
                             text: JSON.stringify({
-                                mensaje: args.forzar ? "Actualizaci├│n forzada completada" : "Nuevas tasas detectadas y actualizadas",
+                                mensaje: args.forzar ? "Actualización forzada completada" : "Nuevas tasas detectadas y actualizadas",
                                 version: tasasData.version,
                                 ultima_actualizacion: tasasData.lastUpdated,
                                 pdf_hash: tasasData.pdfHash,
@@ -615,8 +631,8 @@ export const registerAllTools = (server) => {
                     content: [{
                             type: "text",
                             text: JSON.stringify({
-                                mensaje: "No hay actualizaciones disponibles. El PDF oficial no ha cambiado desde la ├║ltima verificaci├│n.",
-                                nota: "Use el par├ímetro 'forzar: true' para actualizar manualmente si es necesario."
+                                mensaje: "No hay actualizaciones disponibles. El PDF oficial no ha cambiado desde la última verificación.",
+                                nota: "Use el parámetro 'forzar: true' para actualizar manualmente si es necesario."
                             }, null, 2)
                         }],
                 };
@@ -629,26 +645,44 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.tool("obtener_ultimo_boletin", "Obtiene informaci├│n del ├║ltimo bolet├¡n publicado con sus secciones disponibles", {}, async () => {
+    server.tool("obtener_ultimo_boletin", "Obtiene información del último boletín publicado con sus secciones disponibles", {}, async () => {
         try {
             const url = "https://boletinoficial.gba.gob.ar/";
-            const response = await axios.get(url, {
+            const response = await axiosClient.get(url, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
             });
             const $ = cheerio.load(response.data);
-            const lastBulletinText = $('.last-bulletin strong').text().trim();
+            // El portal usa .bulletin-date para el número de boletín
+            const lastBulletinText = $('.bulletin-date strong').text().trim()
+                || $('.bulletin-date').text().replace('Ver anteriores', '').trim()
+                || $('.last-bulletin strong').text().trim();
             const secciones = [];
+            // Cada .bulletin-box tiene un link /secciones/{id}/ver
             $('.bulletin-box').each((_, box) => {
                 const $box = $(box);
-                const link = $box.find('a').attr('href');
                 const nombre = $box.find('h4').text().trim();
+                // Buscar cualquier link que contenga /secciones/
+                let link = '';
                 let id = '';
-                if (link && link.includes('/secciones/')) {
-                    const match = link.match(/\/secciones\/(\d+)/);
-                    if (match)
-                        id = match[1];
+                $box.find('a').each((_, a) => {
+                    const href = $(a).attr('href') || '';
+                    if (href.includes('/secciones/')) {
+                        link = href;
+                        const match = href.match(/\/secciones\/(\d+)/);
+                        if (match) id = match[1];
+                        return false; // break
+                    }
+                });
+                // Fallback: buscar el link en el contenedor padre .row.boxes
+                if (!id) {
+                    const parentLink = $box.closest('a').attr('href') || '';
+                    if (parentLink.includes('/secciones/')) {
+                        link = parentLink;
+                        const match = parentLink.match(/\/secciones\/(\d+)/);
+                        if (match) id = match[1];
+                    }
                 }
                 if (nombre) {
                     secciones.push({
@@ -658,6 +692,21 @@ export const registerAllTools = (server) => {
                     });
                 }
             });
+            // Fallback: extraer IDs directamente de todos los links /secciones/ de la página
+            if (secciones.every(s => !s.id)) {
+                $('a[href*="/secciones/"]').each((_, a) => {
+                    const href = $(a).attr('href') || '';
+                    const nombre = $(a).text().trim() || $(a).find('h4').text().trim();
+                    const match = href.match(/\/secciones\/(\d+)/);
+                    if (match && nombre && !secciones.find(s => s.id === match[1])) {
+                        secciones.push({
+                            nombre,
+                            id: match[1],
+                            link: `https://boletinoficial.gba.gob.ar${href}`
+                        });
+                    }
+                });
+            }
             return {
                 content: [{
                         type: "text",
@@ -675,13 +724,13 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.tool("ver_seccion", "Obtiene metadatos y vista previa de una secci├│n espec├¡fica del bolet├¡n", {
-        id: z.string().describe("ID de la secci├│n a ver"),
+    server.tool("ver_seccion", "Obtiene metadatos y vista previa de una sección específica del boletín", {
+        id: z.string().describe("ID de la sección a ver"),
     }, async (args) => {
         try {
             const id = String(args?.id);
             const url = `https://boletinoficial.gba.gob.ar/secciones/${id}/ver`;
-            const response = await axios.get(url, {
+            const response = await axiosClient.get(url, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
@@ -712,23 +761,23 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.tool("alcance_fuente", "Obtiene informaci├│n sobre el alcance, limitaciones y disclaimer del BOPBA", {}, async () => {
+    server.tool("alcance_fuente", "Obtiene información sobre el alcance, limitaciones y disclaimer del BOPBA", {}, async () => {
         return {
             content: [
                 {
                     type: "text",
-                    text: "Bolet├¡n Oficial de la Provincia de Buenos Aires (BOPBA).\nAlcance: Publicaci├│n oficial de leyes, decretos, edictos, etc. de la Provincia de Buenos Aires.\nLimitaciones: La disponibilidad de documentos depende de la digitalizaci├│n por parte del gobierno.\nDisclaimer: Herramienta no oficial. Verificar siempre la informaci├│n en https://boletinoficial.gba.gob.ar/",
+                    text: "Boletín Oficial de la Provincia de Buenos Aires (BOPBA).\nAlcance: Publicación oficial de leyes, decretos, edictos, etc. de la Provincia de Buenos Aires.\nLimitaciones: La disponibilidad de documentos depende de la digitalización por parte del gobierno.\nDisclaimer: Herramienta no oficial. Verificar siempre la información en https://boletinoficial.gba.gob.ar/",
                 },
             ],
         };
     });
-    server.tool("verificar_vigencia", "Verifica si una secci├│n del bolet├¡n est├í disponible, su fecha de publicaci├│n y si hay versiones modificadas o correcciones posteriores", {
-        id: z.string().describe("ID de la secci├│n a verificar"),
+    server.tool("verificar_vigencia", "Verifica si una sección del boletín está disponible, su fecha de publicación y si hay versiones modificadas o correcciones posteriores", {
+        id: z.string().describe("ID de la sección a verificar"),
     }, async (args) => {
         try {
             const id = String(args?.id);
             const url = `https://boletinoficial.gba.gob.ar/secciones/${id}/ver`;
-            const response = await axios.get(url, {
+            const response = await axiosClient.get(url, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
@@ -744,17 +793,17 @@ export const registerAllTools = (server) => {
             const modificationIndicators = [];
             $('body').each((_, el) => {
                 const text = $(el).text();
-                if (/correcci[o├│]n|rectificaci[o├│]n|errata|modificaci[o├│]n/i.test(text)) {
-                    modificationIndicators.push("Posible correcci├│n o modificaci├│n detectada en el texto");
+                if (/correcci[oó]n|rectificaci[oó]n|errata|modificaci[oó]n/i.test(text)) {
+                    modificationIndicators.push("Posible corrección o modificación detectada en el texto");
                 }
             });
-            let content = `# Verificaci├│n de Vigencia - Secci├│n ${id}\n\n`;
-            content += `## T├¡tulo\n${title || 'No disponible'}\n\n`;
+            let content = `# Verificación de Vigencia - Sección ${id}\n\n`;
+            content += `## Título\n${title || 'No disponible'}\n\n`;
             content += `## Estado de Disponibilidad\n`;
-            content += isAvailable ? "Ô£à DISPONIBLE - El documento puede descargarse\n" : "ÔØî NO DISPONIBLE - No se encontr├│ link de descarga\n";
-            content += `\n## Fecha de Publicaci├│n\n${dateText || 'No detectada en la p├ígina'}\n\n`;
+            content += isAvailable ? "✅ DISPONIBLE - El documento puede descargarse\n" : "⚠️ NO DISPONIBLE - No se encontró link de descarga\n";
+            content += `\n## Fecha de Publicación\n${dateText || 'No detectada en la página'}\n\n`;
             if (modificationIndicators.length > 0) {
-                content += `## Alertas de Modificaci├│n\n`;
+                content += `## Alertas de Modificación\n`;
                 modificationIndicators.forEach(alert => content += `- ${alert}\n`);
                 content += `\n`;
             }
@@ -763,7 +812,7 @@ export const registerAllTools = (server) => {
             if (downloadLink) {
                 content += `- Descarga: https://boletinoficial.gba.gob.ar${downloadLink}\n`;
             }
-            content += `\n> **Nota:** Esta herramienta verifica disponibilidad b├ísica. Para confirmar vigencia legal, consultar las fuentes oficiales del gobierno provincial.`;
+            content += `\n> **Nota:** Esta herramienta verifica disponibilidad básica. Para confirmar vigencia legal, consultar las fuentes oficiales del gobierno provincial.`;
             return {
                 content: [{ type: "text", text: content }],
             };
@@ -775,17 +824,17 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.tool("relacionar_publicaciones", "Busca publicaciones relacionadas con una secci├│n espec├¡fica del bolet├¡n (mismas fechas, mismos organismos, temas similares)", {
-        id: z.string().describe("ID de la secci├│n de referencia"),
+    server.tool("relacionar_publicaciones", "Busca publicaciones relacionadas con una sección específica del boletín (mismas fechas, mismos organismos, temas similares)", {
+        id: z.string().describe("ID de la sección de referencia"),
         palabras_clave: z.string().optional().describe("Palabras clave adicionales para buscar publicaciones relacionadas"),
-        fecha_desde: z.string().optional().describe("Fecha desde YYYY-MM-DD para ampliar b├║squeda"),
-        fecha_hasta: z.string().optional().describe("Fecha hasta YYYY-MM-DD para ampliar b├║squeda"),
+        fecha_desde: z.string().optional().describe("Fecha desde YYYY-MM-DD para ampliar búsqueda"),
+        fecha_hasta: z.string().optional().describe("Fecha hasta YYYY-MM-DD para ampliar búsqueda"),
     }, async (args) => {
         try {
             const id = String(args?.id);
             // First, get the reference section to extract context
             const refUrl = `https://boletinoficial.gba.gob.ar/secciones/${id}/ver`;
-            const refResponse = await axios.get(refUrl, {
+            const refResponse = await axiosClient.get(refUrl, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
@@ -810,9 +859,9 @@ export const registerAllTools = (server) => {
                 queryParams.append("search[date_gteq]", dateGteq);
             if (dateLteq)
                 queryParams.append("search[date_lteq]", dateLteq);
-            queryParams.append("utf8", "Ô£ô");
+            queryParams.append("utf8", "✔");
             const searchUrl = `https://boletinoficial.gba.gob.ar/buscar?${queryParams.toString()}`;
-            const searchResponse = await axios.get(searchUrl, {
+            const searchResponse = await axiosClient.get(searchUrl, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
@@ -842,16 +891,16 @@ export const registerAllTools = (server) => {
                     });
                 }
             });
-            let content = `# Publicaciones Relacionadas - Secci├│n ${id}\n\n`;
-            content += `## Publicaci├│n de Referencia\n`;
-            content += `- **T├¡tulo:** ${refTitle}\n`;
+            let content = `# Publicaciones Relacionadas - Sección ${id}\n\n`;
+            content += `## Publicación de Referencia\n`;
+            content += `- **Título:** ${refTitle}\n`;
             content += `- **Fecha:** ${refDate || 'No disponible'}\n`;
             content += `- **ID:** ${id}\n\n`;
             content += `## Publicaciones Relacionadas Encontradas\n`;
-            content += `**Criterio de b├║squeda:** "${searchQuery}"\n\n`;
+            content += `**Criterio de búsqueda:** "${searchQuery}"\n\n`;
             if (related.length === 0) {
                 content += `No se encontraron publicaciones relacionadas con los criterios actuales.\n`;
-                content += `Sugerencia: Prueba con diferentes palabras clave o ampl├¡a el rango de fechas.\n`;
+                content += `Sugerencia: Prueba con diferentes palabras clave o amplía el rango de fechas.\n`;
             }
             else {
                 related.forEach((pub, idx) => {
@@ -861,7 +910,7 @@ export const registerAllTools = (server) => {
                     content += `- **Enlace:** ${pub.link}\n\n`;
                 });
             }
-            content += `\n> **Nota:** Esta herramienta busca por similitud tem├ítica y temporal. Las relaciones no son oficiales del gobierno.`;
+            content += `\n> **Nota:** Esta herramienta busca por similitud temática y temporal. Las relaciones no son oficiales del gobierno.`;
             return {
                 content: [{ type: "text", text: content }],
             };
@@ -873,12 +922,12 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.tool("buscar_por_semantica", "Busca publicaciones en el BOPBA utilizando expansi├│n sem├íntica de t├®rminos. El LLM debe generar sin├│nimos y t├®rminos equivalentes antes de llamar esta herramienta.", {
+    server.tool("buscar_por_semantica", "Busca publicaciones en el BOPBA utilizando expansión semántica de términos. El LLM debe generar sinónimos y términos equivalentes antes de llamar esta herramienta.", {
         concepto: z.string().describe("Concepto central a buscar (ej. 'teletrabajo', 'licencia parental')"),
-        terminos_equivalentes: z.array(z.string()).describe("Lista de sin├│nimos o t├®rminos relacionados generados por el LLM (ej. ['trabajo remoto', 'home office', 'trabajo a distancia'])"),
+        terminos_equivalentes: z.array(z.string()).describe("Lista de sinónimos o términos relacionados generados por el LLM (ej. ['trabajo remoto', 'home office', 'trabajo a distancia'])"),
         fecha_desde: z.string().optional().describe("Fecha desde YYYY-MM-DD (opcional)"),
         fecha_hasta: z.string().optional().describe("Fecha hasta YYYY-MM-DD (opcional)"),
-        seccion: z.enum(["OFICIAL", "JUDICIAL", "JURISPRUDENCIA", "SUPLEMENTO"]).optional().describe("Secci├│n del bolet├¡n (opcional)"),
+        seccion: z.enum(["OFICIAL", "JUDICIAL", "JURISPRUDENCIA", "SUPLEMENTO", "SUPLEMENTO 1"]).optional().describe("Sección del boletín (opcional)"),
     }, async (args) => {
         try {
             const concepto = args.concepto;
@@ -893,9 +942,9 @@ export const registerAllTools = (server) => {
                 queryParams.append("search[date_lteq]", args.fecha_hasta);
             if (args.seccion)
                 queryParams.append("search[section]", args.seccion);
-            queryParams.append("utf8", "Ô£ô");
+            queryParams.append("utf8", "✔");
             const url = `https://boletinoficial.gba.gob.ar/buscar?${queryParams.toString()}`;
-            const response = await axios.get(url, {
+            const response = await axiosClient.get(url, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
@@ -935,16 +984,16 @@ export const registerAllTools = (server) => {
                     });
                 }
             });
-            let content = `# B├║squeda Sem├íntica - "${concepto}"\n\n`;
-            content += `## T├®rminos de B├║squeda Utilizados\n`;
+            let content = `# Búsqueda Semántica - "${concepto}"\n\n`;
+            content += `## Términos de Búsqueda Utilizados\n`;
             content += `- **Concepto principal:** ${concepto}\n`;
-            content += `- **T├®rminos equivalentes:** ${terminos.join(', ') || 'Ninguno'}\n`;
+            content += `- **Términos equivalentes:** ${terminos.join(', ') || 'Ninguno'}\n`;
             content += `- **Query completa:** "${allTerms}"\n\n`;
             content += `## Resultados Encontrados\n`;
             content += `**Total:** ${results.length} publicaciones\n\n`;
             if (results.length === 0) {
-                content += `No se encontraron publicaciones con los t├®rminos sem├ínticos proporcionados.\n`;
-                content += `Sugerencia: Prueba con diferentes sin├│nimos o t├®rminos m├ís generales.\n`;
+                content += `No se encontraron publicaciones con los términos semánticos proporcionados.\n`;
+                content += `Sugerencia: Prueba con diferentes sinónimos o términos más generales.\n`;
             }
             else {
                 results.forEach((r, idx) => {
@@ -961,7 +1010,7 @@ export const registerAllTools = (server) => {
                     content += `\n`;
                 });
             }
-            content += `\n> **Nota:** Esta herramienta utiliza expansi├│n sem├íntica para capturar publicaciones que pueden no usar la terminolog├¡a exacta del concepto buscado.`;
+            content += `\n> **Nota:** Esta herramienta utiliza expansión semántica para capturar publicaciones que pueden no usar la terminología exacta del concepto buscado.`;
             return {
                 content: [{ type: "text", text: content }],
             };
@@ -969,12 +1018,12 @@ export const registerAllTools = (server) => {
         catch (error) {
             return {
                 isError: true,
-                content: [{ type: "text", text: `Error en b├║squeda sem├íntica: ${error.message}` }],
+                content: [{ type: "text", text: `Error en búsqueda semántica: ${error.message}` }],
             };
         }
     });
-    server.tool("generar_certificacion_forense", "Genera una certificaci├│n forense de autenticidad para una secci├│n del BOPBA con hash SHA-256, timestamp y metadatos de integridad", {
-        id: z.string().describe("ID de la secci├│n a certificar"),
+    server.tool("generar_certificacion_forense", "Genera una certificación forense de autenticidad para una sección del BOPBA con hash SHA-256, timestamp y metadatos de integridad", {
+        id: z.string().describe("ID de la sección a certificar"),
     }, async (args) => {
         try {
             const id = String(args?.id);
@@ -982,7 +1031,7 @@ export const registerAllTools = (server) => {
             const viewUrl = `https://boletinoficial.gba.gob.ar/secciones/${id}/ver`;
             const timestamp = new Date().toISOString();
             // Download the PDF
-            const response = await axios.get(downloadUrl, {
+            const response = await axiosClient.get(downloadUrl, {
                 responseType: 'arraybuffer',
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -993,7 +1042,7 @@ export const registerAllTools = (server) => {
             const sizeBytes = Buffer.byteLength(pdfBuffer, 'utf8');
             const hash = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
             // Get metadata from the view page
-            const viewResponse = await axios.get(viewUrl, {
+            const viewResponse = await axiosClient.get(viewUrl, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
@@ -1001,12 +1050,12 @@ export const registerAllTools = (server) => {
             const $ = cheerio.load(viewResponse.data);
             const title = $('h1, h2, h3').first().text().trim();
             const dateText = $('.date, .fecha, [class*="date"], [class*="fecha"]').first().text().trim();
-            let content = `::: ACTA DE CERTIFICACI├ôN FORENSE DE AUTENTICIDAD Y TRAZABILIDAD\n`;
-            content += `::: Bolet├¡n Oficial de la Provincia de Buenos Aires (BOPBA)\n\n`;
+            let content = `::: ACTA DE CERTIFICACIÓN FORENSE DE AUTENTICIDAD Y TRAZABILIDAD\n`;
+            content += `::: Boletín Oficial de la Provincia de Buenos Aires (BOPBA)\n\n`;
             content += `## DOCUMENTO CERTIFICADO\n`;
-            content += `- **ID de Secci├│n:** \`${id}\`\n`;
-            content += `- **T├¡tulo:** ${title || 'No disponible'}\n`;
-            content += `- **Fecha de Publicaci├│n:** ${dateText || 'No detectada'}\n\n`;
+            content += `- **ID de Sección:** \`${id}\`\n`;
+            content += `- **Título:** ${title || 'No disponible'}\n`;
+            content += `- **Fecha de Publicación:** ${dateText || 'No detectada'}\n\n`;
             content += `## METADATOS FORENSES\n`;
             content += `| Metadato Forense | Detalle Registrado |\n`;
             content += `| :--- | :--- |\n`;
@@ -1015,17 +1064,17 @@ export const registerAllTools = (server) => {
             content += `| **URL de Vista** | ${viewUrl} |\n`;
             content += `| **Peso del Documento** | \`${sizeBytes} bytes\` |\n`;
             content += `| **Hash SHA-256 de Control** | \`${hash}\` |\n\n`;
-            content += `## GARANT├ìA DE INTEGRIDAD\n`;
-            content += `> **[!] GARANT├ìA DE NO ALTERACI├ôN:** Este certificado garantiza que el documento fue descargado ├¡ntegramente desde la fuente oficial del BOPBA en el timestamp indicado. El hash SHA-256 permite verificar cualquier modificaci├│n posterior del archivo.\n\n`;
-            content += `## M├ëTODO DE VERIFICACI├ôN\n`;
+            content += `## GARANTÍA DE INTEGRIDAD\n`;
+            content += `> **[!] GARANTÍA DE NO ALTERACIÓN:** Este certificado garantiza que el documento fue descargado íntegramente desde la fuente oficial del BOPBA en el timestamp indicado. El hash SHA-256 permite verificar cualquier modificación posterior del archivo.\n\n`;
+            content += `## MÉTODO DE VERIFICACIÓN\n`;
             content += `Para verificar la integridad de este documento en el futuro:\n`;
             content += `1. Descargue nuevamente el documento desde: ${downloadUrl}\n`;
             content += `2. Calcule el hash SHA-256 del archivo descargado\n`;
             content += `3. Compare con el hash certificado: \`${hash}\`\n`;
             content += `4. Si los hashes coinciden, el documento no ha sido alterado\n\n`;
             content += `---\n`;
-            content += `*Este documento constituye un instrumento t├®cnico de trazabilidad y autenticidad. No constituye certificaci├│n legal oficial del gobierno provincial. Para fines legales, consulte las autoridades competentes.*\n`;
-            content += `*Certificado generado autom├íticamente por Argentina-Bopba-MCP v1.0.0*`;
+            content += `*Este documento constituye un instrumento técnico de trazabilidad y autenticidad. No constituye certificación legal oficial del gobierno provincial. Para fines legales, consulte las autoridades competentes.*\n`;
+            content += `*Certificado generado automáticamente por Argentina-Bopba-MCP v1.0.0*`;
             return {
                 content: [{ type: "text", text: content }],
             };
@@ -1033,12 +1082,12 @@ export const registerAllTools = (server) => {
         catch (error) {
             return {
                 isError: true,
-                content: [{ type: "text", text: `Error al generar certificaci├│n forense: ${error.message}` }],
+                content: [{ type: "text", text: `Error al generar certificación forense: ${error.message}` }],
             };
         }
     });
-    server.tool("exportar_seccion", "Exporta una secci├│n del BOPBA a formato Markdown estructurado con frontmatter YAML para sistemas de gesti├│n del conocimiento (Notion, Obsidian, etc.)", {
-        id: z.string().describe("ID de la secci├│n a exportar"),
+    server.tool("exportar_seccion", "Exporta una sección del BOPBA a formato Markdown estructurado con frontmatter YAML para sistemas de gestión del conocimiento (Notion, Obsidian, etc.)", {
+        id: z.string().describe("ID de la sección a exportar"),
         incluir_texto: z.boolean().optional().describe("Incluir el texto completo del PDF (por defecto: true)"),
     }, async (args) => {
         try {
@@ -1048,7 +1097,7 @@ export const registerAllTools = (server) => {
             const downloadUrl = `https://boletinoficial.gba.gob.ar/secciones/${id}/descargar`;
             const exportDate = new Date().toISOString();
             // Get metadata from the view page
-            const viewResponse = await axios.get(viewUrl, {
+            const viewResponse = await axiosClient.get(viewUrl, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 },
@@ -1060,9 +1109,9 @@ export const registerAllTools = (server) => {
             const sectionType = $('h1, h2, h3').first().text().trim().split(/\s+/)[0] || 'Desconocido';
             // Build YAML frontmatter
             let content = `---\n`;
-            content += `title: "${title || 'Secci├│n ' + id}"\n`;
+            content += `title: "${title || 'Sección ' + id}"\n`;
             content += `id: "${id}"\n`;
-            content += `source: "Bolet├¡n Oficial de la Provincia de Buenos Aires (BOPBA)"\n`;
+            content += `source: "Boletín Oficial de la Provincia de Buenos Aires (BOPBA)"\n`;
             content += `source_url: "${viewUrl}"\n`;
             content += `download_url: "${downloadUrl}"\n`;
             content += `publication_date: "${dateText || 'Unknown'}"\n`;
@@ -1076,17 +1125,17 @@ export const registerAllTools = (server) => {
             content += `  - seccion-${id}\n`;
             content += `---\n\n`;
             // Add document content
-            content += `# ${title || 'Secci├│n ' + id}\n\n`;
-            content += `> **Fuente:** [BOPBA - Secci├│n ${id}](${viewUrl})\n`;
-            content += `> **Fecha de publicaci├│n:** ${dateText || 'No disponible'}\n`;
+            content += `# ${title || 'Sección ' + id}\n\n`;
+            content += `> **Fuente:** [BOPBA - Sección ${id}](${viewUrl})\n`;
+            content += `> **Fecha de publicación:** ${dateText || 'No disponible'}\n`;
             content += `> **Descarga:** [PDF](${downloadUrl})\n\n`;
             if (incluirTexto) {
                 content += `## Texto Completo\n\n`;
-                content += `> **Nota:** El texto completo se obtiene mediante descarga del PDF. Para visualizar el contenido ├¡ntegro, utilice la herramienta \`descargar_seccion\` o descargue directamente el PDF desde el enlace provisto.\n\n`;
-                content += `El documento original est├í disponible en formato PDF en: ${downloadUrl}\n\n`;
+                content += `> **Nota:** El texto completo se obtiene mediante descarga del PDF. Para visualizar el contenido íntegro, utilice la herramienta \`descargar_seccion\` o descargue directamente el PDF desde el enlace provisto.\n\n`;
+                content += `El documento original está disponible en formato PDF en: ${downloadUrl}\n\n`;
             }
             content += `---\n\n`;
-            content += `*Documento exportado autom├íticamente desde el Bolet├¡n Oficial de la Provincia de Buenos Aires. Verificar siempre la informaci├│n en la fuente oficial.*`;
+            content += `*Documento exportado automáticamente desde el Boletín Oficial de la Provincia de Buenos Aires. Verificar siempre la información en la fuente oficial.*`;
             return {
                 content: [{ type: "text", text: content }],
             };
@@ -1094,12 +1143,12 @@ export const registerAllTools = (server) => {
         catch (error) {
             return {
                 isError: true,
-                content: [{ type: "text", text: `Error al exportar secci├│n: ${error.message}` }],
+                content: [{ type: "text", text: `Error al exportar sección: ${error.message}` }],
             };
         }
     });
-    server.tool("detector_plazos_edictos", "Audita el texto de una secci├│n del BOPBA para detectar e indexar plazos, fechas l├¡mite y hitos temporales relevantes (especialmente ├║til para edictos sucesorios)", {
-        id: z.string().describe("ID de la secci├│n a auditar"),
+    server.tool("detector_plazos_edictos", "Audita el texto de una sección del BOPBA para detectar e indexar plazos, fechas límite y hitos temporales relevantes (especialmente útil para edictos sucesorios)", {
+        id: z.string().describe("ID de la sección a auditar"),
         texto_manual: z.string().optional().describe("Texto manual para analizar (opcional, si no se proporciona descarga el PDF)"),
     }, async (args) => {
         try {
@@ -1108,7 +1157,7 @@ export const registerAllTools = (server) => {
             // If no manual text provided, download the PDF
             if (!text) {
                 const downloadUrl = `https://boletinoficial.gba.gob.ar/secciones/${id}/descargar`;
-                const response = await axios.get(downloadUrl, {
+                const response = await axiosClient.get(downloadUrl, {
                     responseType: 'arraybuffer',
                     headers: {
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -1121,14 +1170,14 @@ export const registerAllTools = (server) => {
             }
             // Define deadline detection patterns
             const patterns = [
-                { regex: /\b\d+\s+(d├¡as?\s+(habiles|corridos)?|meses|a├▒os?)\b/i, name: "Plazo num├®rico" },
-                { regex: /\b(plazo|t├®rmino)\s+de\s+(d├¡as?|meses|a├▒os?)\b/i, name: "Cl├íusula de plazo" },
-                { regex: /\b(prescribe|prescripci├│n)\b/i, name: "Prescripci├│n" },
+                { regex: /\b\d+\s+(días?\s+(habiles|corridos)?|meses|años?)\b/i, name: "Plazo numérico" },
+                { regex: /\b(plazo|término)\s+de\s+(días?|meses|años?)\b/i, name: "Cláusula de plazo" },
+                { regex: /\b(prescribe|prescripción)\b/i, name: "Prescripción" },
                 { regex: /\b(caduca|caducidad)\b/i, name: "Caducidad" },
                 { regex: /\b(vencimiento|mora)\b/i, name: "Vencimiento/Mora" },
-                { regex: /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/g, name: "Fecha espec├¡fica" },
-                { regex: /\b(hasta\s+el\s+(?:\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|el\s+d├¡a\s+\d+))/i, name: "Fecha l├¡mite" },
-                { regex: /\b(dentro\s+de\s+(?:los\s+)?\d+\s+(d├¡as?|meses|a├▒os?))\b/i, name: "Plazo desde publicaci├│n" },
+                { regex: /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/g, name: "Fecha específica" },
+                { regex: /\b(hasta\s+el\s+(?:\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|el\s+día\s+\d+))/i, name: "Fecha límite" },
+                { regex: /\b(dentro\s+de\s+(?:los\s+)?\d+\s+(días?|meses|años?))\b/i, name: "Plazo desde publicación" },
             ];
             // Split text into paragraphs for analysis
             const paragraphs = text.split(/\n\n+/);
@@ -1150,24 +1199,24 @@ export const registerAllTools = (server) => {
                     });
                 }
             }
-            let content = `# Auditor├¡a de Plazos y Hitos Temporales - Secci├│n ${id}\n\n`;
+            let content = `# Auditoría de Plazos y Hitos Temporales - Sección ${id}\n\n`;
             content += `## Resumen\n`;
-            content += `Se identificaron **${results.length}** cl├íusulas con indicadores temporales relevantes.\n\n`;
+            content += `Se identificaron **${results.length}** cláusulas con indicadores temporales relevantes.\n\n`;
             if (results.length === 0) {
-                content += `No se detectaron plazos, fechas l├¡mite o hitos temporales en el texto analizado.\n`;
+                content += `No se detectaron plazos, fechas límite o hitos temporales en el texto analizado.\n`;
                 content += `Esto puede indicar:\n`;
                 content += `- El documento no contiene plazos temporales\n`;
-                content += `- Los plazos est├ín expresados en formato no detectado por los patrones actuales\n`;
+                content += `- Los plazos están expresados en formato no detectado por los patrones actuales\n`;
                 content += `- El texto es muy breve o no es legible\n\n`;
             }
             else {
-                content += `## Cl├íusulas Temporales Detectadas\n\n`;
+                content += `## Cláusulas Temporales Detectadas\n\n`;
                 results.forEach((r, idx) => {
-                    content += `### ${idx + 1}. Cl├íusula Temporal (Indicador: ${r.matches.join(', ')})\n`;
+                    content += `### ${idx + 1}. Cláusula Temporal (Indicador: ${r.matches.join(', ')})\n`;
                     content += `> ${r.paragraph}\n\n`;
                 });
             }
-            content += `## Patrones de B├║squeda Utilizados\n`;
+            content += `## Patrones de Búsqueda Utilizados\n`;
             patterns.forEach((p, idx) => {
                 content += `${idx + 1}. **${p.name}**: ${p.regex.source}\n`;
             });
@@ -1183,8 +1232,8 @@ export const registerAllTools = (server) => {
             };
         }
     });
-    server.prompt("buscar_edicto", "Plantilla para buscar un edicto espec├¡fico", {
-        query: z.string().describe("T├®rminos de b├║squeda del edicto"),
+    server.prompt("buscar_edicto", "Plantilla para buscar un edicto específico", {
+        query: z.string().describe("Términos de búsqueda del edicto"),
     }, (args) => ({
         messages: [
             {
@@ -1196,20 +1245,20 @@ export const registerAllTools = (server) => {
             },
         ],
     }));
-    server.prompt("auditar_seccion_bopba", "Audita y analiza una secci├│n descargada del BOPBA", {
-        id: z.string().describe("ID de la secci├│n del bolet├¡n"),
+    server.prompt("auditar_seccion_bopba", "Audita y analiza una sección descargada del BOPBA", {
+        id: z.string().describe("ID de la sección del boletín"),
     }, (args) => ({
         messages: [
             {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Descarga la secci├│n ${args?.id} usando descargar_seccion. Luego, revisa el contenido exhaustivamente para identificar normativas clave, licitaciones o nombramientos, y genera un reporte estructurado de los hallazgos.`,
+                    text: `Descarga la sección ${args?.id} usando descargar_seccion. Luego, revisa el contenido exhaustivamente para identificar normativas clave, licitaciones o nombramientos, y genera un reporte estructurado de los hallazgos.`,
                 },
             },
         ],
     }));
-    server.prompt("investigar_sociedad", "Investiga publicaciones de una sociedad comercial espec├¡fica", {
+    server.prompt("investigar_sociedad", "Investiga publicaciones de una sociedad comercial específica", {
         nombre_sociedad: z.string().describe("Nombre de la sociedad a investigar"),
         fecha_desde: z.string().optional().describe("Fecha desde YYYY-MM-DD (opcional)"),
         fecha_hasta: z.string().optional().describe("Fecha hasta YYYY-MM-DD (opcional)"),
@@ -1219,28 +1268,28 @@ export const registerAllTools = (server) => {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Busca todas las publicaciones relacionadas con la sociedad "${args?.nombre_sociedad}" en el BOPBA. Usa buscar_boletin con el nombre de la sociedad${args?.fecha_desde ? `, fecha desde ${args.fecha_desde}` : ""}${args?.fecha_hasta ? `, fecha hasta ${args.fecha_hasta}` : ""}. Analiza los resultados para identificar convocatorias, transferencias, avisos societarios y otras publicaciones relevantes. Descarga las secciones m├ís importantes y genera un informe cronol├│gico de todas las publicaciones encontradas.`,
+                    text: `Busca todas las publicaciones relacionadas con la sociedad "${args?.nombre_sociedad}" en el BOPBA. Usa buscar_boletin con el nombre de la sociedad${args?.fecha_desde ? `, fecha desde ${args.fecha_desde}` : ""}${args?.fecha_hasta ? `, fecha hasta ${args.fecha_hasta}` : ""}. Analiza los resultados para identificar convocatorias, transferencias, avisos societarios y otras publicaciones relevantes. Descarga las secciones más importantes y genera un informe cronológico de todas las publicaciones encontradas.`,
                 },
             },
         ],
     }));
-    server.prompt("consultar_agencia_cercana", "Consulta informaci├│n de agencias del BOPBA para publicaci├│n presencial", {
-        zona: z.string().optional().describe("Zona o ciudad de inter├®s (opcional)"),
+    server.prompt("consultar_agencia_cercana", "Consulta información de agencias del BOPBA para publicación presencial", {
+        zona: z.string().optional().describe("Zona o ciudad de interés (opcional)"),
     }, (args) => ({
         messages: [
             {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa la herramienta listar_agencias para obtener todas las agencias del BOPBA${args?.zona ? ` y busca las m├ís cercanas a ${args.zona}` : ""}. Presenta la informaci├│n de contacto, horarios de atenci├│n y direcciones de las agencias m├ís relevantes.`,
+                    text: `Usa la herramienta listar_agencias para obtener todas las agencias del BOPBA${args?.zona ? ` y busca las más cercanas a ${args.zona}` : ""}. Presenta la información de contacto, horarios de atención y direcciones de las agencias más relevantes.`,
                 },
             },
         ],
     }));
-    server.prompt("calcular_costo_publicacion", "Calcula el costo estimado de una publicaci├│n en el BOPBA", {
-        tipo: z.string().describe("Tipo de publicaci├│n: Avisos particulares, Sociedades comerciales, Convocatorias, Transferencias, Edictos judiciales, Subastas"),
+    server.prompt("calcular_costo_publicacion", "Calcula el costo estimado de una publicación en el BOPBA", {
+        tipo: z.string().describe("Tipo de publicación: Avisos particulares, Sociedades comerciales, Convocatorias, Transferencias, Edictos judiciales, Subastas"),
         texto: z.string().describe("Texto completo a publicar"),
-        dias: z.string().optional().describe("Cantidad de d├¡as (opcional, por defecto 1)"),
+        dias: z.string().optional().describe("Cantidad de días (opcional, por defecto 1)"),
         urgencia: z.string().optional().describe("Normal o Urgente (opcional)"),
     }, (args) => ({
         messages: [
@@ -1248,25 +1297,25 @@ export const registerAllTools = (server) => {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa la herramienta calcular_tarifa con los siguientes par├ímetros: tipo_publicacion="${args?.tipo}", texto="${args?.texto}"${args?.dias ? `, dias=${args.dias}` : ""}${args?.urgencia ? `, urgencia="${args.urgencia}"` : ""}. Presenta el costo estimado y las estad├¡sticas del texto.`,
+                    text: `Usa la herramienta calcular_tarifa con los siguientes parámetros: tipo_publicacion="${args?.tipo}", texto="${args?.texto}"${args?.dias ? `, dias=${args.dias}` : ""}${args?.urgencia ? `, urgencia="${args.urgencia}"` : ""}. Presenta el costo estimado y las estadísticas del texto.`,
                 },
             },
         ],
     }));
-    server.prompt("monitorear_ultimas_publicaciones", "Monitorea las ├║ltimas publicaciones del BOPBA en secciones espec├¡ficas", {
-        seccion: z.enum(["OFICIAL", "JUDICIAL", "JURISPRUDENCIA", "SUPLEMENTO"]).optional().describe("Secci├│n de inter├®s (opcional)"),
+    server.prompt("monitorear_ultimas_publicaciones", "Monitorea las últimas publicaciones del BOPBA en secciones específicas", {
+        seccion: z.enum(["OFICIAL", "JUDICIAL", "JURISPRUDENCIA", "SUPLEMENTO", "SUPLEMENTO 1"]).optional().describe("Sección de interés (opcional)"),
     }, (args) => ({
         messages: [
             {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa obtener_ultimo_boletin para identificar el ├║ltimo bolet├¡n publicado y sus secciones. Luego, usa ver_seccion para obtener una vista previa de cada secci├│n${args?.seccion ? `, enfoc├índote en la secci├│n ${args.seccion}` : ""}. Resume los contenidos m├ís relevantes del d├¡a.`,
+                    text: `Usa obtener_ultimo_boletin para identificar el último boletín publicado y sus secciones. Luego, usa ver_seccion para obtener una vista previa de cada sección${args?.seccion ? `, enfocándote en la sección ${args.seccion}` : ""}. Resume los contenidos más relevantes del día.`,
                 },
             },
         ],
     }));
-    server.prompt("buscar_normativa_periodo", "Busca normativas publicadas en un per├¡odo espec├¡fico", {
+    server.prompt("buscar_normativa_periodo", "Busca normativas publicadas en un período específico", {
         fecha_desde: z.string().describe("Fecha desde YYYY-MM-DD"),
         fecha_hasta: z.string().describe("Fecha hasta YYYY-MM-DD"),
         palabras_clave: z.string().optional().describe("Palabras clave para filtrar (opcional)"),
@@ -1276,26 +1325,26 @@ export const registerAllTools = (server) => {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa listar_ediciones_anteriores para identificar los boletines publicados entre ${args?.fecha_desde} y ${args?.fecha_hasta}. Luego, usa buscar_boletin con los filtros de fecha${args?.palabras_clave ? ` y palabras clave "${args.palabras_clave}"` : ""} para encontrar las normativas relevantes. Descarga y analiza los documentos m├ís importantes, generando un resumen de las normativas publicadas en el per├¡odo.`,
+                    text: `Usa listar_ediciones_anteriores para identificar los boletines publicados entre ${args?.fecha_desde} y ${args?.fecha_hasta}. Luego, usa buscar_boletin con los filtros de fecha${args?.palabras_clave ? ` y palabras clave "${args.palabras_clave}"` : ""} para encontrar las normativas relevantes. Descarga y analiza los documentos más importantes, generando un resumen de las normativas publicadas en el período.`,
                 },
             },
         ],
     }));
     server.prompt("verificar_vigencia_documento", "Verifica la vigencia y disponibilidad de un documento del BOPBA", {
-        id: z.string().describe("ID de la secci├│n a verificar"),
+        id: z.string().describe("ID de la sección a verificar"),
     }, (args) => ({
         messages: [
             {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa la herramienta verificar_vigencia para verificar la secci├│n ${args?.id}. Analiza el estado de disponibilidad, fecha de publicaci├│n, y si hay alertas de modificaci├│n o correcci├│n. Presenta un resumen claro del estado del documento.`,
+                    text: `Usa la herramienta verificar_vigencia para verificar la sección ${args?.id}. Analiza el estado de disponibilidad, fecha de publicación, y si hay alertas de modificación o corrección. Presenta un resumen claro del estado del documento.`,
                 },
             },
         ],
     }));
-    server.prompt("encontrar_publicaciones_relacionadas", "Encuentra publicaciones relacionadas con una secci├│n espec├¡fica del BOPBA", {
-        id: z.string().describe("ID de la secci├│n de referencia"),
+    server.prompt("encontrar_publicaciones_relacionadas", "Encuentra publicaciones relacionadas con una sección específica del BOPBA", {
+        id: z.string().describe("ID de la sección de referencia"),
         palabras_clave: z.string().optional().describe("Palabras clave adicionales (opcional)"),
         fecha_desde: z.string().optional().describe("Fecha desde YYYY-MM-DD (opcional)"),
         fecha_hasta: z.string().optional().describe("Fecha hasta YYYY-MM-DD (opcional)"),
@@ -1305,43 +1354,43 @@ export const registerAllTools = (server) => {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa la herramienta relacionar_publicaciones con el ID ${args?.id}${args?.palabras_clave ? ` y palabras clave "${args.palabras_clave}"` : ""}${args?.fecha_desde ? `, fecha desde ${args.fecha_desde}` : ""}${args?.fecha_hasta ? `, fecha hasta ${args.fecha_hasta}` : ""}. Analiza las publicaciones relacionadas encontradas y presenta un resumen organizado por relevancia tem├ítica o temporal.`,
+                    text: `Usa la herramienta relacionar_publicaciones con el ID ${args?.id}${args?.palabras_clave ? ` y palabras clave "${args.palabras_clave}"` : ""}${args?.fecha_desde ? `, fecha desde ${args.fecha_desde}` : ""}${args?.fecha_hasta ? `, fecha hasta ${args.fecha_hasta}` : ""}. Analiza las publicaciones relacionadas encontradas y presenta un resumen organizado por relevancia temática o temporal.`,
                 },
             },
         ],
     }));
-    server.prompt("busqueda_semantica_avanzada", "Realiza b├║squeda sem├íntica en el BOPBA usando expansi├│n de t├®rminos", {
+    server.prompt("busqueda_semantica_avanzada", "Realiza búsqueda semántica en el BOPBA usando expansión de términos", {
         concepto: z.string().describe("Concepto central a buscar"),
-        terminos_equivalentes: z.array(z.string()).describe("Lista de sin├│nimos o t├®rminos relacionados"),
+        terminos_equivalentes: z.array(z.string()).describe("Lista de sinónimos o términos relacionados"),
         fecha_desde: z.string().optional().describe("Fecha desde YYYY-MM-DD (opcional)"),
         fecha_hasta: z.string().optional().describe("Fecha hasta YYYY-MM-DD (opcional)"),
-        seccion: z.enum(["OFICIAL", "JUDICIAL", "JURISPRUDENCIA", "SUPLEMENTO"]).optional().describe("Secci├│n del bolet├¡n (opcional)"),
+        seccion: z.enum(["OFICIAL", "JUDICIAL", "JURISPRUDENCIA", "SUPLEMENTO", "SUPLEMENTO 1"]).optional().describe("Sección del boletín (opcional)"),
     }, (args) => ({
         messages: [
             {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa la herramienta buscar_por_semantica con el concepto "${args?.concepto}" y los t├®rminos equivalentes: ${args?.terminos_equivalentes?.join(', ') || 'ninguno'}${args?.fecha_desde ? `, fecha desde ${args.fecha_desde}` : ""}${args?.fecha_hasta ? `, fecha hasta ${args.fecha_hasta}` : ""}${args?.seccion ? `, secci├│n ${args.seccion}` : ""}. Analiza los resultados encontrados y presenta un resumen de las publicaciones m├ís relevantes.`,
+                    text: `Usa la herramienta buscar_por_semantica con el concepto "${args?.concepto}" y los términos equivalentes: ${args?.terminos_equivalentes?.join(', ') || 'ninguno'}${args?.fecha_desde ? `, fecha desde ${args.fecha_desde}` : ""}${args?.fecha_hasta ? `, fecha hasta ${args.fecha_hasta}` : ""}${args?.seccion ? `, sección ${args.seccion}` : ""}. Analiza los resultados encontrados y presenta un resumen de las publicaciones más relevantes.`,
                 },
             },
         ],
     }));
-    server.prompt("certificar_documento_forense", "Genera certificaci├│n forense de autenticidad para un documento del BOPBA", {
-        id: z.string().describe("ID de la secci├│n a certificar"),
+    server.prompt("certificar_documento_forense", "Genera certificación forense de autenticidad para un documento del BOPBA", {
+        id: z.string().describe("ID de la sección a certificar"),
     }, (args) => ({
         messages: [
             {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa la herramienta generar_certificacion_forense para certificar la secci├│n ${args?.id}. Presenta el certificado completo con todos los metadatos forenses, hash SHA-256 y garant├¡as de integridad.`,
+                    text: `Usa la herramienta generar_certificacion_forense para certificar la sección ${args?.id}. Presenta el certificado completo con todos los metadatos forenses, hash SHA-256 y garantías de integridad.`,
                 },
             },
         ],
     }));
-    server.prompt("exportar_documento_markdown", "Exporta una secci├│n del BOPBA a formato Markdown con frontmatter YAML", {
-        id: z.string().describe("ID de la secci├│n a exportar"),
+    server.prompt("exportar_documento_markdown", "Exporta una sección del BOPBA a formato Markdown con frontmatter YAML", {
+        id: z.string().describe("ID de la sección a exportar"),
         incluir_texto: z.boolean().optional().describe("Incluir texto completo (opcional)"),
     }, (args) => ({
         messages: [
@@ -1349,13 +1398,13 @@ export const registerAllTools = (server) => {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa la herramienta exportar_seccion para exportar la secci├│n ${args?.id}${args?.incluir_texto !== undefined ? ` con incluir_texto=${args.incluir_texto}` : ""}. Presenta el resultado en formato Markdown listo para usar en sistemas de gesti├│n del conocimiento.`,
+                    text: `Usa la herramienta exportar_seccion para exportar la sección ${args?.id}${args?.incluir_texto !== undefined ? ` con incluir_texto=${args.incluir_texto}` : ""}. Presenta el resultado en formato Markdown listo para usar en sistemas de gestión del conocimiento.`,
                 },
             },
         ],
     }));
-    server.prompt("auditar_plazos_edictos", "Audita un documento para detectar plazos, fechas l├¡mite y hitos temporales", {
-        id: z.string().describe("ID de la secci├│n a auditar"),
+    server.prompt("auditar_plazos_edictos", "Audita un documento para detectar plazos, fechas límite y hitos temporales", {
+        id: z.string().describe("ID de la sección a auditar"),
         texto_manual: z.string().optional().describe("Texto manual para analizar (opcional)"),
     }, (args) => ({
         messages: [
@@ -1363,22 +1412,19 @@ export const registerAllTools = (server) => {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Usa la herramienta detector_plazos_edictos para auditar la secci├│n ${args?.id}${args?.texto_manual ? ` con el texto proporcionado` : ""}. Analiza los plazos y hitos temporales detectados, presenta un resumen de los hallazgos m├ís importantes y destaca cualquier plazo cr├¡tico que requiera atenci├│n inmediata.`,
+                    text: `Usa la herramienta detector_plazos_edictos para auditar la sección ${args?.id}${args?.texto_manual ? ` con el texto proporcionado` : ""}. Analiza los plazos y hitos temporales detectados, presenta un resumen de los hallazgos más importantes y destaca cualquier plazo crítico que requiera atención inmediata.`,
                 },
             },
         ],
     }));
 };
 registerAllTools(server);
-const runServer = async () => {
-    if (process.env.NEXT_RUNTIME || process.env.NEXT_PHASE) {
-        return;
-    }
+if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME && !process.env.NEXT_PHASE) {
     const transport = new StdioServerTransport();
-    await server.connect(transport);
-};
-runServer().catch((error) => {
-    process.stderr.write(`Fatal error running server: ${error.message}\n`);
-    process.exit(1);
-});
+    server.connect(transport).catch((error) => {
+        process.stderr.write(`Fatal error running server: ${error.message}\n`);
+        process.exit(1);
+    });
+    process.stderr.write("[bopba] conectado y escuchando\n");
+}
 //# sourceMappingURL=bopba.js.map

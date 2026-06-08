@@ -1,7 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import * as readline from "readline";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -15,7 +15,16 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");                     // raiz del repo
 const LEGAL_MCP = path.join(ROOT, "servers", "legal-mcp");
 const SAIJ_DIR  = path.join(ROOT, "servers", "saij-mcp");
-const NODE = process.execPath;
+// FIX: resolveNode con fallback via where/which (compatibilidad nvm/fnm/Claude Desktop)
+function resolveNode() {
+    if (process.platform === "win32") {
+        try { return execSync("where node", { encoding: "utf8" }).split("\n")[0].trim(); } catch {}
+    } else {
+        try { return execSync("which node", { encoding: "utf8" }).trim(); } catch {}
+    }
+    return process.execPath;
+}
+const NODE = resolveNode();
 
 // ---------------------------------------------------------------------------
 // FIX BUG 6: Todos los conectores heredan NODE_TLS_REJECT_UNAUTHORIZED=0
@@ -36,14 +45,16 @@ const TIMEOUTS = {
 };
 
 // ---------------------------------------------------------------------------
-// FIX BUG 7: Evitar nombres dobles como saij__saij_search_* 
-// Si el tool interno ya tiene el prefix del conector como prefijo, lo eliminamos.
+// FIX BUG 7: Evitar nombres dobles como saij__saij_search_*
+// Solo stripear el prefijo con doble guión bajo (técnico).
+// NO stripear prefijo con guión simple: algunos conectores como SAIJ usan
+// saij_search_* como nombre semántico propio, no como prefijo técnico.
+// Ejemplo correcto: saij__saij_search_jurisprudencia -> saij_search_jurisprudencia
+// Ejemplo incorrecto anterior: saij__search_jurisprudencia (rompía el callTool)
 // ---------------------------------------------------------------------------
 function stripInternalPrefix(prefix, toolName) {
-    const candidates = [`${prefix}__`, `${prefix}_`];
-    for (const c of candidates) {
-        if (toolName.startsWith(c)) return toolName.slice(c.length);
-    }
+    const techPrefix = `${prefix}__`;
+    if (toolName.startsWith(techPrefix)) return toolName.slice(techPrefix.length);
     return toolName;
 }
 

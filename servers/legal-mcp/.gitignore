@@ -1,0 +1,21 @@
+# Dependencias
+node_modules/
+
+# Build
+build/
+
+# Datos locales
+data/
+
+# Logs y diagnostico
+*.log
+diagnose*.js
+diagnose-output.txt
+
+# Variables de entorno
+.env
+.env.*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

@@ -1,4 +1,27 @@
-node_modules/ 
-data/ 
-*.log 
-.env 
+# Dependencias
+node_modules/
+
+# Builds compilados - excluir la raiz pero trackear los builds de los servidores
+/build/
+!servers/legal-mcp/build/
+!servers/saij-mcp/build/
+
+# Datos locales y caches
+data/
+
+# Logs y diagnostico
+*.log
+diagnose*.js
+diagnose-output.txt
+
+# Variables de entorno
+.env
+.env.*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/

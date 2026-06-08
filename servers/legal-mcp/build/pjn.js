@@ -4,8 +4,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import axios from "axios";
 import * as cheerio from "cheerio";
-import puppeteer from "puppeteer";
 import crypto from "crypto";
+import https from "https";
+
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const axiosClient = axios.create({ httpsAgent });
 let globalBrowser = null;
 let globalPage = null;
 export function registerAllTools(server) {
@@ -22,7 +25,7 @@ export function registerAllTools(server) {
                 pagina: args.pagina.toString(),
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 }
@@ -58,7 +61,7 @@ export function registerAllTools(server) {
                 tipo_parte: args.tipo_parte || "",
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" }
             });
             const $ = cheerio.load(response.data);
@@ -88,7 +91,7 @@ export function registerAllTools(server) {
                 expediente_id: args.expediente_id,
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" }
             });
             const $ = cheerio.load(response.data);
@@ -117,7 +120,7 @@ export function registerAllTools(server) {
                 actuacion_id: args.actuacion_id,
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 responseType: "arraybuffer"
             });
@@ -147,7 +150,7 @@ export function registerAllTools(server) {
                 action: "actuaciones",
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 }
@@ -178,6 +181,7 @@ export function registerAllTools(server) {
             return { content: [{ type: "text", text: "El navegador ya está abierto. Por favor resuelve el Captcha en la ventana de Chromium y escribe 'Listo' al usuario, luego usa finalizar_hitl_browser." }] };
         }
         try {
+            const { default: puppeteer } = await import("puppeteer");
             globalBrowser = await puppeteer.launch({
                 headless: false,
                 defaultViewport: null,
@@ -296,7 +300,7 @@ export function registerAllTools(server) {
                 actuacion_id: actuacionId,
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 responseType: 'arraybuffer',
                 timeout: 30000
@@ -359,7 +363,7 @@ export function registerAllTools(server) {
             if (args.jurisdiction_id) {
                 payload.append("jurisdiction_id", args.jurisdiction_id);
             }
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" }
             });
             const $ = cheerio.load(response.data);
@@ -410,7 +414,7 @@ export function registerAllTools(server) {
             if (args.jurisdiction_id) {
                 payload.append("jurisdiction_id", args.jurisdiction_id);
             }
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" }
             });
             const $ = cheerio.load(response.data);
@@ -458,7 +462,7 @@ export function registerAllTools(server) {
                 pagina: "1",
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" }
             });
             const $ = cheerio.load(response.data);
@@ -514,7 +518,7 @@ export function registerAllTools(server) {
                 apellido: args.apellido,
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" }
             });
             const $ = cheerio.load(response.data);
@@ -555,7 +559,7 @@ export function registerAllTools(server) {
                 orden_por: args.orden_por,
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" }
             });
             const $ = cheerio.load(response.data);
@@ -594,7 +598,7 @@ export function registerAllTools(server) {
                 documento_id: args.documento_id,
                 "g-recaptcha-response": args.captchaToken
             });
-            const response = await axios.post(targetUrl, payload.toString(), {
+            const response = await axiosClient.post(targetUrl, payload.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 responseType: 'arraybuffer'
             });
@@ -645,7 +649,7 @@ export const server = new McpServer({
 registerAllTools(server);
 registerAllPrompts(server);
 // Connect with stdio (only when run directly and not in Vercel/Next environment)
-if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME && process.env.NODE_ENV !== "production") {
+if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME) {
     const transport = new StdioServerTransport();
     server.connect(transport).catch((err) => {
         console.error("Server connection failed", err);

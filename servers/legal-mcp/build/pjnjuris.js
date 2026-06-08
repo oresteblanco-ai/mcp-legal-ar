@@ -3,7 +3,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import axios from "axios";
-import puppeteer from "puppeteer";
+import https from "https";
+
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const axiosClient = axios.create({ httpsAgent });
+
 import crypto from "crypto";
 let globalBrowser = null;
 let globalPage = null;
@@ -17,7 +21,7 @@ export function registerAllTools(server) {
     }, async (args) => {
         try {
             const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
-            const response = await axios.post(targetUrl, {
+            const response = await axiosClient.post(targetUrl, {
                 modo: "expediente",
                 numero: args.numero,
                 anio: args.anio,
@@ -60,7 +64,7 @@ export function registerAllTools(server) {
     }, async (args) => {
         try {
             const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
-            const response = await axios.post(targetUrl, {
+            const response = await axiosClient.post(targetUrl, {
                 modo: "caratula",
                 caratula: args.caratula,
                 camara_id: args.camara_id,
@@ -105,7 +109,7 @@ export function registerAllTools(server) {
     }, async (args) => {
         try {
             const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
-            const response = await axios.post(targetUrl, {
+            const response = await axiosClient.post(targetUrl, {
                 modo: "fallo",
                 numero_sentencia: args.numero_sentencia,
                 fecha_desde: args.fecha_desde,
@@ -156,7 +160,7 @@ export function registerAllTools(server) {
     }, async (args) => {
         try {
             const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
-            const response = await axios.post(targetUrl, {
+            const response = await axiosClient.post(targetUrl, {
                 modo: "texto_csjn",
                 texto_contiene: args.texto_contiene,
                 texto_no_contiene: args.texto_no_contiene,
@@ -208,7 +212,7 @@ export function registerAllTools(server) {
     }, async (args) => {
         try {
             const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
-            const response = await axios.post(targetUrl, {
+            const response = await axiosClient.post(targetUrl, {
                 modo: "texto_camaras",
                 texto_contiene: args.texto_contiene,
                 texto_no_contiene: args.texto_no_contiene,
@@ -255,7 +259,7 @@ export function registerAllTools(server) {
     }, async (args) => {
         try {
             const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
-            const response = await axios.post(targetUrl, {
+            const response = await axiosClient.post(targetUrl, {
                 modo: "sumarios",
                 texto_contiene: args.texto_contiene,
                 camara_id: args.camara_id,
@@ -291,46 +295,35 @@ export function registerAllTools(server) {
         }
     });
     // Tool: pjn_descargar_fallo_pdf
-    server.tool("pjn_descargar_fallo_pdf", "Descarga el documento PDF o Word original de la sentencia si se conoce su identificador interno.", {
-        fallo_id: z.string().describe("Identificador interno (guid o id numérico) del fallo devuelto por las búsquedas."),
+    // [NO IMPLEMENTADO] El endpoint scw.pjn.gov.ar/scw/api/jurisprudencia/descargar no es público.
+    // El portal PJN no expone descarga directa de PDF por ID vía API REST documentada.
+    // Para descargar un fallo: usar iniciar_hitl_browser, navegar al resultado y descargar manualmente.
+    server.tool("pjn_descargar_fallo_pdf", "[NO DISPONIBLE] El portal PJN no expone un endpoint público de descarga de fallos por ID. Para descargar un fallo, usar iniciar_hitl_browser y navegar al resultado.", {
+        fallo_id: z.string().describe("Identificador interno del fallo."),
         captchaToken: z.string().describe("Token de reCAPTCHA obtenido vía HITL.")
     }, async (args) => {
-        try {
-            const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia/descargar";
-            const response = await axios.post(targetUrl, {
-                fallo_id: args.fallo_id,
-                captchaToken: args.captchaToken
-            }, {
-                headers: {
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (compatible; pjn-juris-mcp/1.0)"
-                },
-                responseType: "arraybuffer"
-            });
-            let resultText = "# PJN - Descarga de Fallo\n\n";
-            resultText += `**Fallo ID:** ${args.fallo_id}\n`;
-            resultText += `**Estado:** Descargado exitosamente\n`;
-            resultText += `**Tamaño:** ${response.data.byteLength} bytes\n`;
-            resultText += `**Nota:** El contenido binario del PDF/Word ha sido descargado. Para visualizar, use un visor de PDF o Word.`;
-            return { content: [{ type: "text", text: resultText }] };
-        }
-        catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return { content: [{ type: "text", text: `Error en pjn_descargar_fallo_pdf: ${message}` }], isError: true };
-        }
+        return {
+            content: [{ type: "text", text: `[NO IMPLEMENTADO] pjn_descargar_fallo_pdf: el portal PJN no expone un endpoint público de descarga de fallos por ID (fallo_id: ${args.fallo_id}). Para descargar el documento, usar iniciar_hitl_browser, navegar al fallo en https://scw.pjn.gov.ar y descargarlo desde la interfaz web.` }],
+            isError: true
+        };
     });
-    // Tool: buscar_jurisprudencia_fed (original, kept for compatibility)
-    server.tool("buscar_jurisprudencia_fed", "Busca fallos federales en el fuero Contencioso Administrativo Federal.", {
-        criterio: z.string().describe("Criterio o término de búsqueda legal (ej. 'maternidad', número de expediente)"),
-        pagina: z.number().optional().default(1).describe("Número de página para paginación"),
-        captchaToken: z.string().describe("Token de reCAPTCHA obligatorio para consultar el portal")
+    // Tool: buscar_jurisprudencia_fed
+    // Mantenido por compatibilidad con el prompt investigacion_jurisprudencia.
+    // Internamente delega a modo "texto_camaras" con camara_id CNACAF (Contencioso Admin Fed),
+    // alineando el body con el patrón estándar del resto de los tools.
+    // El parámetro `pagina` se conserva en la firma pero el API del PJN no lo soporta vía REST;
+    // se documenta como ignorado hasta confirmar soporte real.
+    server.tool("buscar_jurisprudencia_fed", "Busca fallos en el fuero Contencioso Administrativo Federal por texto libre. Para búsquedas más específicas usar pjn_buscar_jurisprudencia_por_expediente, pjn_buscar_jurisprudencia_por_caratula o pjn_buscar_sumarios.", {
+        criterio: z.string().describe("Término de búsqueda legal (ej. 'daño moral', 'prescripción', número de expediente)."),
+        pagina: z.number().optional().default(1).describe("Reservado para paginación futura. Actualmente ignorado por el API del PJN."),
+        captchaToken: z.string().describe("Token de reCAPTCHA obligatorio para consultar el portal.")
     }, async (args) => {
         try {
-            const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia"; // Endpoint representativo
-            // Remove mock, make real request
-            const response = await axios.post(targetUrl, {
-                criterio: args.criterio,
-                pagina: args.pagina,
+            const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
+            const response = await axiosClient.post(targetUrl, {
+                modo: "texto_camaras",
+                texto_contiene: args.criterio,
+                camara_id: "CNACAF",
                 captchaToken: args.captchaToken
             }, {
                 headers: {
@@ -338,14 +331,13 @@ export function registerAllTools(server) {
                     "User-Agent": "Mozilla/5.0 (compatible; pjn-juris-mcp/1.0)"
                 }
             });
-            // Basic parsing (assuming JSON response from the API for the sake of the real implementation)
             const data = response.data;
-            let resultText = "# PJN - Jurisprudencia Contencioso Admin Fed - Resultados\n\n";
+            let resultText = "# PJN - Jurisprudencia Contencioso Admin Fed\n\n";
             resultText += `**Búsqueda:** ${args.criterio}\n`;
-            resultText += `**Página:** ${args.pagina}\n\n`;
+            resultText += `**Cámara:** CNACAF (Cámara Nacional de Apelaciones en lo Contencioso Administrativo Federal)\n\n`;
             if (data && data.resultados && data.resultados.length > 0) {
                 data.resultados.forEach((r) => {
-                    resultText += `### Expediente: ${r.expediente || "N/A"}\n`;
+                    resultText += `### ${r.expediente || "N/A"}\n`;
                     resultText += `- **Carátula:** ${r.caratula || "N/A"}\n`;
                     resultText += `- **Tribunal:** ${r.tribunal || "N/A"}\n`;
                     resultText += `- **Fecha:** ${r.fecha || "N/A"}\n`;
@@ -353,8 +345,7 @@ export function registerAllTools(server) {
                 });
             }
             else {
-                resultText += "No se encontraron resultados o la estructura de respuesta es distinta.\n";
-                resultText += `\n**Respuesta Bruta:**\n\`\`\`json\n${JSON.stringify(data).substring(0, 500)}...\n\`\`\`\n`;
+                resultText += "No se encontraron resultados.\n";
             }
             return { content: [{ type: "text", text: resultText }] };
         }
@@ -371,7 +362,7 @@ export function registerAllTools(server) {
                 role: "user",
                 content: {
                     type: "text",
-                    text: `Por favor, utiliza la herramienta buscar_jurisprudencia_fed para investigar el tema: ${args.tema}. Necesitarás proporcionar un captchaToken válido provisto por la UI o utilizando las herramientas iniciar_hitl_browser y finalizar_hitl_browser. Se prefieren iniciar_hitl_browser y finalizar_hitl_browser para saltar el Captcha sin pedir al usuario que copie y pegue HTML manualmente.`
+                    text: `Investiga jurisprudencia del fuero Contencioso Administrativo Federal sobre: ${args.tema}.\n\nHerramientas disponibles (usar en este orden según el caso):\n1. iniciar_hitl_browser + finalizar_hitl_browser para obtener el captchaToken.\n2. buscar_jurisprudencia_fed para búsqueda por texto libre en CNACAF.\n3. pjn_buscar_jurisprudencia_por_caratula si se conoce el nombre de las partes.\n4. pjn_buscar_jurisprudencia_por_expediente si se conoce el número de expediente.\n5. pjn_buscar_sumarios para buscar en extractos de la Secretaría de Jurisprudencia.\n6. exportar_fallo para exportar los resultados a Markdown con frontmatter YAML.\n\nNota: el captchaToken es obligatorio para todas las consultas al portal PJN.`
                 }
             }]
     }));
@@ -381,6 +372,7 @@ export function registerAllTools(server) {
             return { content: [{ type: "text", text: "El navegador ya está abierto. Por favor resuelve el Captcha en https://scw.pjn.gov.ar y ejecuta finalizar_hitl_browser." }] };
         }
         try {
+            const { default: puppeteer } = await import("puppeteer");
             globalBrowser = await puppeteer.launch({
                 headless: false,
                 defaultViewport: null,
@@ -414,8 +406,51 @@ export function registerAllTools(server) {
     });
     // Tool: alcance_fuente
     server.tool("alcance_fuente", "Informa las capacidades, fuentes de datos, limitaciones y disclaimer del conector pjn-juris-mcp.", {}, async () => {
-        const text = `# Alcance y Fuentes - PJN - Jurisprudencia Contencioso Admin Fed\n\n## Datos del Conector\n- **Servidor:** pjn-juris-mcp\n- **Fuente Legal:** PJN - Jurisprudencia Contencioso Admin Fed\n- **URL Oficial:** https://scw.pjn.gov.ar\n- **Viabilidad Estimada:** 🟡 Baja-Media (reCAPTCHA)\n\n### Advertencias de Seguridad\n> ⚠️ ADVERTENCIA DE SEGURIDAD: Este portal está protegido por Google reCAPTCHA. Las consultas en vivo pueden fallar sin resolución externa de captchas.\n\n## Herramientas Ofrecidas\n- \`buscar_jurisprudencia_fed\`: Busca fallos federales en el fuero Contencioso Administrativo Federal.\n- \`alcance_fuente\`: Este informe de alcance y cobertura.\n\n## Aviso Legal\nEste servidor es un conector automatizado con fines de investigación legal y no constituye asesoramiento profesional. Las consultas se realizan sobre portales oficiales públicos de la República Argentina.`;
-        return { content: [{ type: "text", text: text }] };
+        const text = [
+            "# Alcance y Fuentes - PJN Jurisprudencia (pjn-juris-mcp)",
+            "",
+            "## Datos del Conector",
+            "- **Servidor:** pjn-juris-mcp v1.0.0",
+            "- **Fuente oficial:** https://scw.pjn.gov.ar",
+            "- **Viabilidad:** Baja-Media - el portal usa Google reCAPTCHA. Todas las consultas requieren captchaToken obtenido via iniciar_hitl_browser + finalizar_hitl_browser.",
+            "",
+            "## Herramientas Operativas",
+            "Estas herramientas realizan llamadas reales al portal PJN:",
+            "",
+            "### Busqueda de jurisprudencia (requieren captchaToken)",
+            "- `pjn_buscar_jurisprudencia_por_expediente` - Por numero y anio de expediente. Endpoint: modo=expediente.",
+            "- `pjn_buscar_jurisprudencia_por_caratula` - Por nombre de las partes. Endpoint: modo=caratula.",
+            "- `pjn_buscar_jurisprudencia_por_fallo` - Por numero de sentencia, magistrado o rango de fechas. Endpoint: modo=fallo.",
+            "- `pjn_buscar_jurisprudencia_por_texto_corte_suprema` - Texto completo en CSJN. Endpoint: modo=texto_csjn.",
+            "- `pjn_buscar_jurisprudencia_por_texto_camaras` - Texto completo en camaras nacionales/federales. Endpoint: modo=texto_camaras.",
+            "- `pjn_buscar_sumarios` - En extractos de la Secretaria de Jurisprudencia. Endpoint: modo=sumarios.",
+            "- `buscar_jurisprudencia_fed` - Alias de texto_camaras preconfigurado para CNACAF. Compatibilidad con prompt investigacion_jurisprudencia.",
+            "",
+            "### Busqueda semantica y relacional",
+            "- `buscar_por_semantica` - Expande el concepto con sinonimos antes de buscar (modo=texto_camaras).",
+            "- `relacionar_fallos` - Busca fallos con partes o temas similares (modo=caratula).",
+            "",
+            "### Utilidades",
+            "- `iniciar_hitl_browser` - Abre Chromium para resolver el CAPTCHA manualmente.",
+            "- `finalizar_hitl_browser` - Cierra el navegador y extrae cookies/userAgent de sesion.",
+            "- `exportar_fallo` - Exporta datos de un fallo a Markdown con frontmatter YAML. Recibe los datos como argumentos (no hace fetch por ID).",
+            "- `detector_plazos_jurisprudencia` - Detecta plazos y fechas limite en el texto de un fallo.",
+            "- `alcance_fuente` - Este informe.",
+            "",
+            "## Herramientas NO Disponibles [NO IMPLEMENTADO]",
+            "El portal PJN no expone endpoints REST publicos para estas funciones:",
+            "- `pjn_descargar_fallo_pdf` - No hay API de descarga por ID. Usar iniciar_hitl_browser.",
+            "- `generar_certificacion_forense` - Requiere descarga real; sin ella el hash carece de valor forense.",
+            "- `pjn_buscar_guia_judicial` - La guia es HTML estatico en /guia_judicial/.",
+            "- `pjn_consultar_concursos` - Los concursos se publican como paginas HTML.",
+            "- `pjn_buscar_formularios_csjn` - Los formularios CSJN son PDFs en csjn.gov.ar.",
+            "- `pjn_estadisticas` - Las estadisticas son informes PDF/HTML en /estadisticas/.",
+            "",
+            "## Aviso Legal",
+            "Conector automatizado para investigacion legal. No constituye asesoramiento profesional.",
+            "Las consultas se realizan sobre portales oficiales publicos de la Republica Argentina."
+        ].join("\n");
+        return { content: [{ type: "text", text }] };
     });
     // Tool: detector_plazos_jurisprudencia
     server.tool("detector_plazos_jurisprudencia", "Audita el texto de fallos jurisprudenciales para detectar e indexar plazos, fechas límite y hitos temporales relevantes (plazos de apelación, prescripciones, vencimientos)", {
@@ -490,62 +525,17 @@ export function registerAllTools(server) {
         }
     });
     // Tool: generar_certificacion_forense
-    server.tool("generar_certificacion_forense", "Genera una certificación forense de autenticidad para un fallo del PJN con hash SHA-256, timestamp y metadatos de integridad", {
-        fallo_id: z.string().describe("ID del fallo a certificar"),
-        captchaToken: z.string().describe("Token de reCAPTCHA para acceso al documento"),
+    // [NO IMPLEMENTADO] Requiere descarga real del fallo vía endpoint no público.
+    // La certificación SHA-256 sobre un buffer descargado desde un endpoint inexistente
+    // no tiene valor forense. Se marca como no disponible hasta implementar descarga real.
+    server.tool("generar_certificacion_forense", "[NO DISPONIBLE] Requiere acceso a un endpoint de descarga de fallos que el PJN no expone públicamente. La certificación forense sería sobre un documento no descargado.", {
+        fallo_id: z.string().describe("ID del fallo a certificar."),
+        captchaToken: z.string().describe("Token de reCAPTCHA para acceso al documento.")
     }, async (args) => {
-        try {
-            const falloId = String(args.fallo_id);
-            const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia/descargar";
-            const timestamp = new Date().toISOString();
-            // Download the document
-            const response = await axios.post(targetUrl, {
-                fallo_id: falloId,
-                captchaToken: args.captchaToken
-            }, {
-                headers: {
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (compatible; pjn-juris-mcp/1.0)"
-                },
-                responseType: 'arraybuffer',
-                timeout: 30000
-            });
-            const docBuffer = Buffer.from(response.data);
-            const sizeBytes = Buffer.byteLength(docBuffer, 'utf8');
-            const hash = crypto.createHash('sha256').update(docBuffer).digest('hex');
-            let content = `::: ACTA DE CERTIFICACIÓN FORENSE DE AUTENTICIDAD Y TRAZABILIDAD\n`;
-            content += `::: Poder Judicial de la Nación (PJN) - Jurisprudencia\n\n`;
-            content += `## DOCUMENTO CERTIFICADO\n`;
-            content += `- **ID de Fallo:** \`${falloId}\`\n`;
-            content += `- **Fuente:** Poder Judicial de la Nación (PJN) - Jurisprudencia\n\n`;
-            content += `## METADATOS FORENSES\n`;
-            content += `| Metadato Forense | Detalle Registrado |\n`;
-            content += `| :--- | :--- |\n`;
-            content += `| **Timestamp UTC** | \`${timestamp}\` |\n`;
-            content += `| **URL de Origen** | ${targetUrl} |\n`;
-            content += `| **Peso del Documento** | \`${sizeBytes} bytes\` |\n`;
-            content += `| **Hash SHA-256 de Control** | \`${hash}\` |\n\n`;
-            content += `## GARANTÍA DE INTEGRIDAD\n`;
-            content += `> **[!] GARANTÍA DE NO ALTERACIÓN:** Este certificado garantiza que el fallo fue descargado íntegramente desde la fuente oficial del PJN en el timestamp indicado. El hash SHA-256 permite verificar cualquier modificación posterior del archivo.\n\n`;
-            content += `## MÉTODO DE VERIFICACIÓN\n`;
-            content += `Para verificar la integridad de este documento en el futuro:\n`;
-            content += `1. Descargue nuevamente el fallo desde el PJN usando el ID ${falloId}\n`;
-            content += `2. Calcule el hash SHA-256 del archivo descargado\n`;
-            content += `3. Compare con el hash certificado: \`${hash}\`\n`;
-            content += `4. Si los hashes coinciden, el documento no ha sido alterado\n\n`;
-            content += `---\n`;
-            content += `*Este documento constituye un instrumento técnico de trazabilidad y autenticidad. No constituye certificación legal oficial del Poder Judicial de la Nación. Para fines legales, consulte las autoridades competentes.*\n`;
-            content += `*Certificado generado automáticamente por Argentina-PjnJuris-MCP v1.0.0*`;
-            return {
-                content: [{ type: "text", text: content }],
-            };
-        }
-        catch (error) {
-            return {
-                isError: true,
-                content: [{ type: "text", text: `Error al generar certificación forense: ${error.message}` }],
-            };
-        }
+        return {
+            content: [{ type: "text", text: `[NO IMPLEMENTADO] generar_certificacion_forense: el portal PJN no expone un endpoint público de descarga por ID (fallo_id: ${args.fallo_id}). Sin acceso al documento original no es posible generar un hash SHA-256 con valor forense. Para certificar un fallo, descargarlo manualmente vía iniciar_hitl_browser y calcular el hash sobre el archivo local.` }],
+            isError: true
+        };
     });
     // Tool: buscar_por_semantica
     server.tool("buscar_por_semantica", "Busca jurisprudencia en el PJN utilizando expansión semántica de términos. El LLM debe generar sinónimos y términos equivalentes antes de llamar esta herramienta.", {
@@ -560,7 +550,7 @@ export function registerAllTools(server) {
             // Combine concept with equivalent terms for broader search
             const allTerms = [concepto, ...terminos].join(' ');
             const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
-            const response = await axios.post(targetUrl, {
+            const response = await axiosClient.post(targetUrl, {
                 modo: "texto_camaras",
                 texto_contiene: allTerms,
                 camara_id: args.camara_id,
@@ -619,7 +609,7 @@ export function registerAllTools(server) {
             // Combine base criteria with related terms
             const searchQuery = [criterioBase, ...terminosRelacionados].join(' ');
             const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
-            const response = await axios.post(targetUrl, {
+            const response = await axiosClient.post(targetUrl, {
                 modo: "caratula",
                 caratula: searchQuery,
                 camara_id: args.camara_id,
@@ -666,232 +656,94 @@ export function registerAllTools(server) {
         }
     });
     // Tool: exportar_fallo
-    server.tool("exportar_fallo", "Exporta la información de un fallo jurisprudencial a formato Markdown estructurado con frontmatter YAML para sistemas de gestión del conocimiento (Notion, Obsidian, etc.)", {
-        fallo_id: z.string().describe("ID del fallo a exportar"),
-        captchaToken: z.string().describe("Token de reCAPTCHA para acceso al portal"),
-        incluir_sumario: z.boolean().optional().describe("Incluir sumario del fallo (por defecto: true)"),
+    // Exporta metadata + sumario de un fallo obtenido previamente via búsqueda.
+    // No intenta descarga por ID (endpoint no público). Recibe el objeto fallo como argumento.
+    server.tool("exportar_fallo", "Exporta la información de un fallo a Markdown con frontmatter YAML (Notion, Obsidian). Requiere pasar los datos del fallo obtenidos previamente con las herramientas de búsqueda.", {
+        fallo_id: z.string().describe("Identificador del fallo (para referencia en el frontmatter)."),
+        caratula: z.string().optional().describe("Carátula del expediente."),
+        tribunal: z.string().optional().describe("Tribunal o cámara."),
+        fecha: z.string().optional().describe("Fecha de la sentencia."),
+        sumario: z.string().optional().describe("Texto del sumario obtenido de la búsqueda.")
     }, async (args) => {
         try {
-            const falloId = args.fallo_id;
-            const incluirSumario = args.incluir_sumario !== false;
             const exportDate = new Date().toISOString();
-            // Get fallo data (mock - in real implementation would fetch from API)
-            const targetUrl = "https://scw.pjn.gov.ar/scw/api/jurisprudencia";
-            // Build YAML frontmatter
             let content = `---\n`;
-            content += `title: "Fallo ${falloId}"\n`;
-            content += `fallo_id: "${falloId}"\n`;
+            content += `title: "${args.caratula || `Fallo ${args.fallo_id}`}"\n`;
+            content += `fallo_id: "${args.fallo_id}"\n`;
+            content += `tribunal: "${args.tribunal || "N/A"}"\n`;
+            content += `fecha: "${args.fecha || "N/A"}"\n`;
             content += `source: "Poder Judicial de la Nación (PJN) - Jurisprudencia"\n`;
-            content += `source_url: "${targetUrl}"\n`;
+            content += `source_url: "https://scw.pjn.gov.ar"\n`;
             content += `export_date: "${exportDate}"\n`;
-            content += `exported_by: "Argentina-PjnJuris-MCP v1.0.0"\n`;
-            content += `tags:\n`;
-            content += `  - PJN\n`;
-            content += `  - jurisprudencia\n`;
-            content += `  - poder-judicial-nacion\n`;
-            content += `  - fallo-${falloId}\n`;
+            content += `tags:\n  - PJN\n  - jurisprudencia\n  - fallo-${args.fallo_id}\n`;
             content += `---\n\n`;
-            // Add document content
-            content += `# Fallo ${falloId}\n\n`;
-            content += `> **Fuente:** [PJN Jurisprudencia](${targetUrl})\n`;
-            content += `> **ID de Fallo:** ${falloId}\n\n`;
-            if (incluirSumario) {
-                content += `## Sumario\n\n`;
-                content += `> **Nota:** El contenido completo del sumario se obtiene mediante consulta al portal. Para visualizar el contenido íntegro, utilice las herramientas de búsqueda de jurisprudencia.\n\n`;
+            content += `# ${args.caratula || `Fallo ${args.fallo_id}`}\n\n`;
+            content += `| Campo | Dato |\n|---|---|\n`;
+            content += `| **Fallo ID** | ${args.fallo_id} |\n`;
+            content += `| **Tribunal** | ${args.tribunal || "N/A"} |\n`;
+            content += `| **Fecha** | ${args.fecha || "N/A"} |\n\n`;
+            if (args.sumario) {
+                content += `## Sumario\n\n${args.sumario}\n\n`;
             }
-            content += `---\n\n`;
-            content += `*Documento exportado automáticamente desde el Poder Judicial de la Nación. Verificar siempre la información en la fuente oficial.*`;
-            return {
-                content: [{ type: "text", text: content }],
-            };
+            content += `---\n*Exportado desde PJN Jurisprudencia. Verificar en la fuente oficial: https://scw.pjn.gov.ar*`;
+            return { content: [{ type: "text", text: content }] };
         }
         catch (error) {
             return {
                 isError: true,
-                content: [{ type: "text", text: `Error al exportar fallo: ${error.message}` }],
+                content: [{ type: "text", text: `Error al exportar fallo: ${error.message}` }]
             };
         }
     });
     // Tool: pjn_buscar_guia_judicial
-    server.tool("pjn_buscar_guia_judicial", "Busca en la Guía Judicial del PJN (directorio de tribunales, jueces y personal judicial).", {
-        tribunal: z.string().optional().describe("Nombre del tribunal a buscar (ej. 'Cámara Civil')."),
+    // [NO IMPLEMENTADO] El PJN no expone un endpoint REST para la guía judicial.
+    // La guía es una página HTML en https://www.pjn.gov.ar/guia_judicial/ - requiere scraping.
+    // Para consultar: usar iniciar_hitl_browser y navegar manualmente.
+    server.tool("pjn_buscar_guia_judicial", "[NO DISPONIBLE] El PJN no expone un endpoint REST para la guía judicial. Para consultar tribunales y personal judicial, usar iniciar_hitl_browser y navegar a https://www.pjn.gov.ar/guia_judicial/", {
+        tribunal: z.string().optional().describe("Nombre del tribunal a buscar."),
         fuero: z.enum(["CIVIL", "COMERCIAL", "PENAL", "LABORAL", "CONTENCIOSO_ADMINISTRATIVO", "FEDERAL", "ELECTORAL", "SEGURIDAD_SOCIAL"]).optional().describe("Fuero o rama del derecho."),
-        localidad: z.string().optional().describe("Localidad o ciudad (ej. 'Buenos Aires', 'Córdoba')."),
-        captchaToken: z.string().describe("Token de reCAPTCHA obtenido vía HITL.")
+        localidad: z.string().optional().describe("Localidad o ciudad.")
     }, async (args) => {
-        try {
-            const targetUrl = "https://www.pjn.gov.ar/guia-judicial";
-            const response = await axios.post(targetUrl, {
-                tribunal: args.tribunal,
-                fuero: args.fuero,
-                localidad: args.localidad,
-                captchaToken: args.captchaToken
-            }, {
-                headers: {
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (compatible; pjn-juris-mcp/1.0)"
-                }
-            });
-            const data = response.data;
-            let resultText = "# PJN - Guía Judicial\n\n";
-            if (args.tribunal)
-                resultText += `**Tribunal:** ${args.tribunal}\n`;
-            if (args.fuero)
-                resultText += `**Fuero:** ${args.fuero}\n`;
-            if (args.localidad)
-                resultText += `**Localidad:** ${args.localidad}\n\n`;
-            if (data && data.resultados && data.resultados.length > 0) {
-                data.resultados.forEach((r) => {
-                    resultText += `### ${r.nombre || "N/A"}\n`;
-                    resultText += `- **Dirección:** ${r.direccion || "N/A"}\n`;
-                    resultText += `- **Teléfono:** ${r.telefono || "N/A"}\n`;
-                    resultText += `- **Email:** ${r.email || "N/A"}\n`;
-                    resultText += `- **Jurisdicción:** ${r.jurisdiccion || "N/A"}\n\n`;
-                });
-            }
-            else {
-                resultText += "No se encontraron resultados en la Guía Judicial.\n";
-            }
-            return { content: [{ type: "text", text: resultText }] };
-        }
-        catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return { content: [{ type: "text", text: `Error en pjn_buscar_guia_judicial: ${message}` }], isError: true };
-        }
+        return {
+            content: [{ type: "text", text: `[NO IMPLEMENTADO] pjn_buscar_guia_judicial: el PJN no expone un endpoint REST para la guía judicial${args.tribunal ? ` (${args.tribunal})` : ""}. Para consultar, usar iniciar_hitl_browser y navegar a https://www.pjn.gov.ar/guia_judicial/` }],
+            isError: true
+        };
     });
     // Tool: pjn_consultar_concursos
-    server.tool("pjn_consultar_concursos", "Consulta concursos de empleo y concursos judiciales en el PJN.", {
+    // [NO IMPLEMENTADO] El PJN no expone un endpoint REST para concursos judiciales.
+    server.tool("pjn_consultar_concursos", "[NO DISPONIBLE] El PJN no expone un endpoint REST para concursos judiciales. Para consultar concursos vigentes, usar iniciar_hitl_browser y navegar al sitio oficial del PJN.", {
         fuero: z.enum(["CIVIL", "COMERCIAL", "PENAL", "LABORAL", "FEDERAL"]).optional().describe("Fuero del concurso."),
-        estado: z.enum(["ABIERTO", "CERRADO", "EN_CURSO", "FINALIZADO"]).optional().describe("Estado del concurso."),
-        fecha_desde: z.string().optional().describe("Fecha desde para filtrar (DD/MM/YYYY)."),
-        captchaToken: z.string().describe("Token de reCAPTCHA obtenido vía HITL.")
+        estado: z.enum(["ABIERTO", "CERRADO", "EN_CURSO", "FINALIZADO"]).optional().describe("Estado del concurso.")
     }, async (args) => {
-        try {
-            const targetUrl = "https://www.pjn.gov.ar/concursos";
-            const response = await axios.post(targetUrl, {
-                fuero: args.fuero,
-                estado: args.estado,
-                fecha_desde: args.fecha_desde,
-                captchaToken: args.captchaToken
-            }, {
-                headers: {
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (compatible; pjn-juris-mcp/1.0)"
-                }
-            });
-            const data = response.data;
-            let resultText = "# PJN - Concursos Judiciales\n\n";
-            if (args.fuero)
-                resultText += `**Fuero:** ${args.fuero}\n`;
-            if (args.estado)
-                resultText += `**Estado:** ${args.estado}\n`;
-            if (args.fecha_desde)
-                resultText += `**Fecha desde:** ${args.fecha_desde}\n\n`;
-            if (data && data.resultados && data.resultados.length > 0) {
-                data.resultados.forEach((r) => {
-                    resultText += `### ${r.titulo || "N/A"}\n`;
-                    resultText += `- **Fuero:** ${r.fuero || "N/A"}\n`;
-                    resultText += `- **Estado:** ${r.estado || "N/A"}\n`;
-                    resultText += `- **Fecha de cierre:** ${r.fecha_cierre || "N/A"}\n`;
-                    resultText += `- **Requisitos:** ${r.requisitos || "N/A"}\n\n`;
-                });
-            }
-            else {
-                resultText += "No se encontraron concursos activos.\n";
-            }
-            return { content: [{ type: "text", text: resultText }] };
-        }
-        catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return { content: [{ type: "text", text: `Error en pjn_consultar_concursos: ${message}` }], isError: true };
-        }
+        return {
+            content: [{ type: "text", text: `[NO IMPLEMENTADO] pjn_consultar_concursos: el PJN no expone un endpoint REST para concursos judiciales${args.fuero ? ` (fuero: ${args.fuero})` : ""}. Para consultar concursos vigentes, usar iniciar_hitl_browser y navegar a https://www.pjn.gov.ar` }],
+            isError: true
+        };
     });
     // Tool: pjn_buscar_formularios_csjn
-    server.tool("pjn_buscar_formularios_csjn", "Busca formularios de la Corte Suprema (Acordada CSJN 12/2020) para inicio de demandas y recursos.", {
+    // [NO IMPLEMENTADO] Los formularios CSJN (Acordada 12/2020) se publican como PDFs,
+    // no via endpoint REST con filtros por tipo/fuero.
+    server.tool("pjn_buscar_formularios_csjn", "[NO DISPONIBLE] Los formularios CSJN (Acordada 12/2020) no se exponen via endpoint REST. Para acceder a los formularios, usar iniciar_hitl_browser y navegar a https://www.csjn.gov.ar", {
         tipo_formulario: z.enum(["DEMANDA", "RECURSO_DIRECTO", "RECURSO_QUEJA", "AMPARO", "HABEAS_CORPUS", "HABEAS_DATA"]).optional().describe("Tipo de formulario."),
-        fuero: z.enum(["CIVIL", "COMERCIAL", "PENAL", "CONTENCIOSO_ADMINISTRATIVO", "LABORAL"]).optional().describe("Fuero del formulario."),
-        captchaToken: z.string().describe("Token de reCAPTCHA obtenido vía HITL.")
+        fuero: z.enum(["CIVIL", "COMERCIAL", "PENAL", "CONTENCIOSO_ADMINISTRATIVO", "LABORAL"]).optional().describe("Fuero del formulario.")
     }, async (args) => {
-        try {
-            const targetUrl = "https://www.pjn.gov.ar/formularios-csjn";
-            const response = await axios.post(targetUrl, {
-                tipo_formulario: args.tipo_formulario,
-                fuero: args.fuero,
-                captchaToken: args.captchaToken
-            }, {
-                headers: {
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (compatible; pjn-juris-mcp/1.0)"
-                }
-            });
-            const data = response.data;
-            let resultText = "# PJN - Formularios CSJN (Acordada 12/2020)\n\n";
-            if (args.tipo_formulario)
-                resultText += `**Tipo de Formulario:** ${args.tipo_formulario}\n`;
-            if (args.fuero)
-                resultText += `**Fuero:** ${args.fuero}\n\n`;
-            if (data && data.resultados && data.resultados.length > 0) {
-                data.resultados.forEach((r) => {
-                    resultText += `### ${r.nombre || "N/A"}\n`;
-                    resultText += `- **Descripción:** ${r.descripcion || "N/A"}\n`;
-                    resultText += `- **URL del formulario:** ${r.url || "N/A"}\n`;
-                    resultText += `- **Instrucciones:** ${r.instrucciones || "N/A"}\n\n`;
-                });
-            }
-            else {
-                resultText += "No se encontraron formularios con los criterios especificados.\n";
-            }
-            return { content: [{ type: "text", text: resultText }] };
-        }
-        catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return { content: [{ type: "text", text: `Error en pjn_buscar_formularios_csjn: ${message}` }], isError: true };
-        }
+        return {
+            content: [{ type: "text", text: `[NO IMPLEMENTADO] pjn_buscar_formularios_csjn: los formularios CSJN (Acordada 12/2020) no se exponen via endpoint REST${args.tipo_formulario ? ` (tipo: ${args.tipo_formulario})` : ""}. Para acceder, usar iniciar_hitl_browser y navegar a https://www.csjn.gov.ar` }],
+            isError: true
+        };
     });
     // Tool: pjn_estadisticas
-    server.tool("pjn_estadisticas", "Accede a datos estadísticos del PJN por jurisdicción y fuero.", {
-        jurisdiccion: z.enum(["CSJ", "CIV", "CAF", "CCF", "CNE", "CSS", "CPE", "CNT", "CFP", "CCC", "COM", "CPF", "CPN", "FBB", "FCR", "FCB", "FCT", "FGR", "FLP", "FMP", "FMZ", "FPO", "FPA", "FRE", "FSA", "FRO", "FSM", "FTU"]).optional().describe("Jurisdicción para filtrar estadísticas."),
-        fuero: z.enum(["CIVIL", "COMERCIAL", "PENAL", "LABORAL", "CONTENCIOSO_ADMINISTRATIVO", "FEDERAL"]).optional().describe("Fuero para filtrar estadísticas."),
-        anio: z.number().optional().describe("Año para estadísticas específicas (4 dígitos)."),
-        captchaToken: z.string().describe("Token de reCAPTCHA obtenido vía HITL.")
+    // [NO IMPLEMENTADO] Las estadisticas del PJN se publican como informes PDF/HTML,
+    // no via endpoint REST con filtros por jurisdiccion y fuero.
+    server.tool("pjn_estadisticas", "[NO DISPONIBLE] Las estadisticas del PJN no se exponen via endpoint REST. Para acceder a informes estadisticos, usar iniciar_hitl_browser y navegar a https://www.pjn.gov.ar/estadisticas/", {
+        jurisdiccion: z.enum(["CSJ", "CIV", "CAF", "CCF", "CNE", "CSS", "CPE", "CNT", "CFP", "CCC", "COM", "CPF", "CPN", "FBB", "FCR", "FCB", "FCT", "FGR", "FLP", "FMP", "FMZ", "FPO", "FPA", "FRE", "FSA", "FRO", "FSM", "FTU"]).optional().describe("Jurisdiccion."),
+        fuero: z.enum(["CIVIL", "COMERCIAL", "PENAL", "LABORAL", "CONTENCIOSO_ADMINISTRATIVO", "FEDERAL"]).optional().describe("Fuero."),
+        anio: z.number().optional().describe("Anio (4 digitos).")
     }, async (args) => {
-        try {
-            const targetUrl = "https://www.pjn.gov.ar/estadisticas";
-            const response = await axios.post(targetUrl, {
-                jurisdiccion: args.jurisdiccion,
-                fuero: args.fuero,
-                anio: args.anio,
-                captchaToken: args.captchaToken
-            }, {
-                headers: {
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (compatible; pjn-juris-mcp/1.0)"
-                }
-            });
-            const data = response.data;
-            let resultText = "# PJN - Estadísticas Judiciales\n\n";
-            if (args.jurisdiccion)
-                resultText += `**Jurisdicción:** ${args.jurisdiccion}\n`;
-            if (args.fuero)
-                resultText += `**Fuero:** ${args.fuero}\n`;
-            if (args.anio)
-                resultText += `**Año:** ${args.anio}\n\n`;
-            if (data && data.estadisticas) {
-                resultText += `## Resumen\n`;
-                resultText += `- **Total de expedientes:** ${data.estadisticas.total_expedientes || "N/A"}\n`;
-                resultText += `- **Expedientes resueltos:** ${data.estadisticas.expedientes_resueltos || "N/A"}\n`;
-                resultText += `- **Expedientes pendientes:** ${data.estadisticas.expedientes_pendientes || "N/A"}\n`;
-                resultText += `- **Tiempo promedio de resolución:** ${data.estadisticas.tiempo_promedio || "N/A"}\n\n`;
-            }
-            else {
-                resultText += "No se encontraron datos estadísticos.\n";
-            }
-            return { content: [{ type: "text", text: resultText }] };
-        }
-        catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return { content: [{ type: "text", text: `Error en pjn_estadisticas: ${message}` }], isError: true };
-        }
+        return {
+            content: [{ type: "text", text: `[NO IMPLEMENTADO] pjn_estadisticas: las estadisticas del PJN no se exponen via endpoint REST${args.jurisdiccion ? ` (jurisdiccion: ${args.jurisdiccion})` : ""}${args.anio ? `, anio: ${args.anio}` : ""}. Para acceder a informes estadisticos, usar iniciar_hitl_browser y navegar a https://www.pjn.gov.ar/estadisticas/` }],
+            isError: true
+        };
     });
 }
 // Initialize the local server instance
@@ -902,7 +754,18 @@ export const server = new McpServer({
 // Register tools
 registerAllTools(server);
 // Connect with stdio (only when run directly and not in Vercel/Next environment)
-if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME && process.env.NODE_ENV !== "production") {
+if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME) {
+    // FIX: cleanup Puppeteer browser on process exit to prevent zombie Chromium
+    const cleanupBrowser = async () => {
+        if (globalBrowser) {
+            try { await globalBrowser.close(); } catch { /* ignorar */ }
+            globalBrowser = null;
+            globalPage = null;
+        }
+    };
+    process.on("SIGINT",  async () => { await cleanupBrowser(); process.exit(0); });
+    process.on("SIGTERM", async () => { await cleanupBrowser(); process.exit(0); });
+    process.on("exit",    ()       => { if (globalBrowser) { try { globalBrowser.process()?.kill(); } catch { /* ignorar */ } } });
     const transport = new StdioServerTransport();
     server.connect(transport).catch((err) => {
         console.error("Server connection failed", err);

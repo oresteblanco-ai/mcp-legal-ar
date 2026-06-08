@@ -1,6 +1,9 @@
 import axios from "axios";
+import https from "https";
 import { CONFIG } from "../config.js";
 import { cacheService } from "./cache-service.js";
+
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 /**
  * Base SAIJ API Client with rate limiting, common headers, and intelligent caching
  */
@@ -13,6 +16,7 @@ export class ApiClient {
         this.client = axios.create({
             baseURL: CONFIG.BASE_URL,
             timeout: CONFIG.TIMEOUT,
+            httpsAgent,
             headers: {
                 "User-Agent": CONFIG.DEFAULT_USER_AGENT,
                 "Accept": "application/json, text/plain, */*",

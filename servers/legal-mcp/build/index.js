@@ -1,7 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import * as readline from "readline";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -12,10 +12,21 @@ import { fileURLToPath } from "url";
 // ---------------------------------------------------------------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ROOT = path.resolve(__dirname, "..");                     // raiz del repo
+// index.js vive en <repo>/servers/legal-mcp/build/ -> subir 3 niveles
+const ROOT = path.resolve(__dirname, "..", "..", "..");          // raiz del repo
 const LEGAL_MCP = path.join(ROOT, "servers", "legal-mcp");
 const SAIJ_DIR  = path.join(ROOT, "servers", "saij-mcp");
-const NODE = process.execPath;
+// process.execPath puede apuntar a una ruta inexistente en nvm/fnm;
+// buscamos node en PATH como fallback seguro.
+function resolveNode() {
+    if (process.platform === "win32") {
+        try { return execSync("where node", { encoding: "utf8" }).split("\n")[0].trim(); } catch {}
+    } else {
+        try { return execSync("which node", { encoding: "utf8" }).trim(); } catch {}
+    }
+    return process.execPath;
+}
+const NODE = resolveNode();
 
 // ---------------------------------------------------------------------------
 // FIX BUG 6: Todos los conectores heredan NODE_TLS_REJECT_UNAUTHORIZED=0

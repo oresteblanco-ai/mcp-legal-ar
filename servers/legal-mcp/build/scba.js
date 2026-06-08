@@ -1,10 +1,22 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+#!/usr/bin/env node
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
+import axios from "axios";
+import * as cheerio from "cheerio";
+import https from "https";
+import { fileURLToPath } from "url";
+import * as pathModule from "path";
+
+// FIX: __dirname anclado al módulo para uso en guardar_documentos_en_disco
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = pathModule.dirname(__filename);
+
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const axiosClient = axios.create({ httpsAgent, timeout: 30000 });
 
 const BASE_URL = "https://sentencias.scba.gov.ar/RegistroElectronico";
 
-// idRegistro: 1 = Sentencias, 2 = Resoluciones (confirmar con el sitio)
 const ID_REGISTRO = { sentencias: "1", resoluciones: "2" };
 
 const HEADERS = {
@@ -19,44 +31,44 @@ const HEADERS = {
 // ---------------------------------------------------------------------------
 
 function extraerOptions(html) {
-    // Extrae { value, text } de todos los <option> del HTML
     const re = /<option\s+value="([^"]*)"[^>]*>([\s\S]*?)<\/option>/gi;
     const items = [];
     let m;
     while ((m = re.exec(html)) !== null) {
         const value = m[1].trim();
-        const text = m[2].replace(/&#xBA;/g, "º").replace(/&#xB0;/g, "°").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
+        const text = m[2]
+            .replace(/&#xBA;/g, "º").replace(/&#xB0;/g, "°")
+            .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+            .trim();
         if (value && value !== "-1") items.push({ value, text });
     }
     return items;
 }
 
-function extraerFilas(html) {
-    // Extrae filas de la tabla DataTable: busca arrays JSON en el script de inicializacion
-    // El sitio carga los datos via AJAX al POST, la respuesta es HTML con tabla vacia
-    // pero el POST de busqueda devuelve JSON con { data: [[...], ...] }
-    // Intentamos parsear como JSON primero
+function extraerFilas(raw) {
     try {
-        const parsed = JSON.parse(html);
+        const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
         if (parsed && Array.isArray(parsed.data)) return parsed.data;
         if (parsed && Array.isArray(parsed)) return parsed;
     } catch { /* no es JSON */ }
     return [];
 }
 
+/**
+ * Extrae texto de .card-body usando cheerio en lugar de regex,
+ * para capturar correctamente el contenido con divs anidados.
+ * FIX: el regex original capturaba solo hasta el primer </div> hijo.
+ */
 function extraerTextoDocumento(html) {
-    // Extrae texto de .card-body del HTML del modal
-    const re = /<[^>]+class="[^"]*card-body[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+    const $ = cheerio.load(html);
     const partes = [];
-    let m;
-    while ((m = re.exec(html)) !== null) {
-        // Limpiar tags HTML
-        const texto = m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    $('[class*="card-body"]').each((_, el) => {
+        const texto = $(el).text().replace(/\s+/g, " ").trim();
         if (texto) partes.push(texto);
-    }
+    });
     if (partes.length) return partes.join("\n");
-    // Fallback: limpiar todo el HTML
-    return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    // Fallback: texto plano de todo el body
+    return $("body").text().replace(/\s+/g, " ").trim();
 }
 
 function limpiarNombre(texto) {
@@ -64,24 +76,15 @@ function limpiarNombre(texto) {
 }
 
 // ---------------------------------------------------------------------------
-// Herramientas
+// Logica de negocio
 // ---------------------------------------------------------------------------
-
-async function listarTiposRegistro() {
-    return [
-        { valor: "sentencias", etiqueta: "Sentencias" },
-        { valor: "resoluciones", etiqueta: "Resoluciones" },
-    ];
-}
 
 async function listarOrganismos(tipo = "sentencias") {
     if (!ID_REGISTRO[tipo]) throw new Error("tipo_registro debe ser 'sentencias' o 'resoluciones'");
     const idRegistro = ID_REGISTRO[tipo];
     const url = `${BASE_URL}/OrganismosDeUnRegistro?idRegistro=${idRegistro}&null=`;
-    const res = await fetch(url, { headers: HEADERS });
-    if (!res.ok) throw new Error(`HTTP ${res.status} al obtener organismos`);
-    const html = await res.text();
-    const options = extraerOptions(html);
+    const res = await axiosClient.get(url, { headers: HEADERS });
+    const options = extraerOptions(res.data);
     return options.map((o) => ({ id: o.value, nombre: o.text }));
 }
 
@@ -91,24 +94,25 @@ async function buscarDocumentos({
     fecha_hasta,
     texto_busqueda,
     tipo_registro = "sentencias",
-    max_paginas = 3,
     max_documentos = 20,
 }) {
     const reFecha = /^\d{2}\/\d{2}\/\d{4}$/;
-    if (!reFecha.test(fecha_desde)) return { error: `Fecha desde invalida: '${fecha_desde}'. Use DD/MM/AAAA` };
-    if (!reFecha.test(fecha_hasta)) return { error: `Fecha hasta invalida: '${fecha_hasta}'. Use DD/MM/AAAA` };
-    if (!ID_REGISTRO[tipo_registro]) return { error: "tipo_registro debe ser 'sentencias' o 'resoluciones'" };
+    if (!reFecha.test(fecha_desde))
+        return { error: `Fecha desde invalida: '${fecha_desde}'. Use DD/MM/AAAA` };
+    if (!reFecha.test(fecha_hasta))
+        return { error: `Fecha hasta invalida: '${fecha_hasta}'. Use DD/MM/AAAA` };
+    if (!ID_REGISTRO[tipo_registro])
+        return { error: "tipo_registro debe ser 'sentencias' o 'resoluciones'" };
 
-    // Resolver idOrganismo: puede venir como nombre o como id numerico
     let idOrganismo = organismo;
     let nombreOrganismo = organismo;
     if (isNaN(Number(organismo))) {
-        // Es un nombre - buscar el id
         const lista = await listarOrganismos(tipo_registro);
         const encontrado = lista.find(
             (o) => o.nombre.toLowerCase().trim() === organismo.toLowerCase().trim()
         );
-        if (!encontrado) return { error: `Organismo no encontrado: '${organismo}'. Usa listar_organismos para ver los disponibles.` };
+        if (!encontrado)
+            return { error: `Organismo no encontrado: '${organismo}'. Usa listar_organismos para ver los disponibles.` };
         idOrganismo = encontrado.id;
         nombreOrganismo = encontrado.nombre;
     }
@@ -123,15 +127,12 @@ async function buscarDocumentos({
         registro: tipo_registro === "sentencias" ? "REGISTRO DE SENTENCIAS" : "REGISTRO DE RESOLUCIONES",
     };
 
-    const res = await fetch(`${BASE_URL}/BuscarRegistrosPorFechaYOrganismo`, {
-        method: "POST",
-        headers: HEADERS,
-        body: JSON.stringify(body),
-    });
-    if (!res.ok) return { error: `HTTP ${res.status} al buscar documentos` };
-
-    const texto = await res.text();
-    const filas = extraerFilas(texto);
+    const res = await axiosClient.post(
+        `${BASE_URL}/BuscarRegistrosPorFechaYOrganismo`,
+        body,
+        { headers: HEADERS }
+    );
+    const filas = extraerFilas(res.data);
 
     if (!filas.length) {
         return {
@@ -151,34 +152,33 @@ async function buscarDocumentos({
     for (let i = 0; i < limite; i++) {
         const fila = filas[i];
         try {
-            // fila[0] = id, fila[1] = nroRegistro (objeto {display}), fila[2] = fecha, fila[3] = nroExp, fila[4] = caratula
-            const id = Array.isArray(fila) ? fila[0] : fila.id;
-            const nroReg = Array.isArray(fila) ? (fila[1]?.display ?? fila[1]) : fila.nroReg;
-            const fecha = Array.isArray(fila) ? (fila[2]?.display ?? fila[2]) : fila.fecha;
-            const nroExp = Array.isArray(fila) ? (fila[3]?.display ?? fila[3]) : fila.nroExp;
-            const caratula = Array.isArray(fila) ? fila[4] : fila.caratula;
+            const id       = Array.isArray(fila) ? fila[0]                       : fila.id;
+            const nroReg   = Array.isArray(fila) ? (fila[1]?.display ?? fila[1]) : fila.nroReg;
+            const fecha    = Array.isArray(fila) ? (fila[2]?.display ?? fila[2]) : fila.fecha;
+            const nroExp   = Array.isArray(fila) ? (fila[3]?.display ?? fila[3]) : fila.nroExp;
+            const caratula = Array.isArray(fila) ? fila[4]                       : fila.caratula;
 
-            // Obtener texto completo
-            const resDoc = await fetch(`${BASE_URL}/ObtenerRegistroVisualizar/`, {
-                method: "POST",
-                headers: HEADERS,
-                body: JSON.stringify({ idCodigoAcceso: id }),
-            });
+            const resDoc = await axiosClient.post(
+                `${BASE_URL}/ObtenerRegistroVisualizar/`,
+                { idCodigoAcceso: id },
+                { headers: HEADERS }
+            );
 
             let contenido = "";
-            if (resDoc.ok) {
-                const htmlDoc = await resDoc.text();
-                contenido = extraerTextoDocumento(htmlDoc);
+            if (resDoc.data) {
+                contenido = extraerTextoDocumento(
+                    typeof resDoc.data === "string" ? resDoc.data : JSON.stringify(resDoc.data)
+                );
             } else {
-                errores.push(`Doc ${i + 1}: HTTP ${resDoc.status}`);
+                errores.push(`Doc ${i + 1}: respuesta vacia`);
             }
 
             documentos.push({
-                titulo: limpiarNombre(String(caratula || `doc_${i + 1}`)),
-                nro_registro: String(nroReg || ""),
-                fecha: String(fecha || ""),
-                nro_expediente: String(nroExp || ""),
-                caratula: String(caratula || ""),
+                titulo:         limpiarNombre(String(caratula || `doc_${i + 1}`)),
+                nro_registro:   String(nroReg  || ""),
+                fecha:          String(fecha   || ""),
+                nro_expediente: String(nroExp  || ""),
+                caratula:       String(caratula || ""),
                 contenido,
             });
         } catch (e) {
@@ -196,19 +196,30 @@ async function buscarDocumentos({
     };
 }
 
-async function guardarDocumentosEnDisco({ documentos, organismo, tipo_registro = "sentencias", carpeta_base = "sentencias judiciales" }) {
-    const fs = await import("fs");
+async function guardarDocumentosEnDisco({
+    documentos,
+    organismo,
+    tipo_registro = "sentencias",
+    carpeta_base = "sentencias judiciales",
+}) {
+    const fs   = await import("fs");
     const path = await import("path");
-    const nombreOrg = organismo.replace(/[<>:"/\\|?*]/g, "").trim();
-    const rutaDestino = path.join(carpeta_base, tipo_registro, nombreOrg);
+    const nombreOrg   = organismo.replace(/[<>:"/\\|?*]/g, "").trim();
+    // FIX: si carpeta_base es relativa, anclarla al directorio del módulo
+    // para evitar que los archivos se creen en el cwd del proceso hub
+    const resolvedBase = pathModule.isAbsolute(carpeta_base)
+        ? carpeta_base
+        : pathModule.join(__dirname, "..", "..", carpeta_base);
+    const rutaDestino = path.join(resolvedBase, tipo_registro, nombreOrg);
     fs.mkdirSync(rutaDestino, { recursive: true });
 
     const guardados = [];
-    const errores = [];
+    const errores   = [];
 
     for (const doc of documentos) {
         try {
-            const nombre = (doc.titulo || "sin_titulo").replace(/[<>:"/\\|?*]/g, "").trim().slice(0, 150);
+            const nombre = (doc.titulo || "sin_titulo")
+                .replace(/[<>:"/\\|?*]/g, "").trim().slice(0, 150);
             const ruta = path.join(rutaDestino, `${nombre}.txt`);
             fs.writeFileSync(ruta, doc.contenido || "", "utf-8");
             guardados.push(ruta);
@@ -217,113 +228,116 @@ async function guardarDocumentosEnDisco({ documentos, organismo, tipo_registro =
         }
     }
 
-    return { carpeta: rutaDestino, archivos_guardados: guardados, total: guardados.length, errores };
+    return {
+        carpeta: rutaDestino,
+        archivos_guardados: guardados,
+        total: guardados.length,
+        errores,
+    };
 }
 
 // ---------------------------------------------------------------------------
-// Servidor MCP
+// Servidor McpServer - patron estandar del proyecto
+// Reemplaza: Server + CallToolRequestSchema + ListToolsRequestSchema (SDK legacy)
 // ---------------------------------------------------------------------------
 
-const TOOLS = [
-    {
-        name: "listar_tipos_registro",
-        description: "Devuelve los tipos de registro disponibles en la SCBA: Sentencias y Resoluciones.",
-        inputSchema: { type: "object", properties: {} },
-    },
-    {
-        name: "listar_organismos",
-        description: "Devuelve la lista de organismos judiciales disponibles en sentencias.scba.gov.ar para el tipo de registro indicado. Llamar antes de buscar_documentos para obtener los nombres y IDs exactos.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                tipo_registro: { type: "string", enum: ["sentencias", "resoluciones"], description: "Default: sentencias." },
-            },
-        },
-    },
-    {
-        name: "buscar_documentos",
-        description: "Busca sentencias o resoluciones en la SCBA y devuelve el texto completo de cada documento.",
-        inputSchema: {
-            type: "object",
-            required: ["organismo", "fecha_desde", "fecha_hasta", "texto_busqueda"],
-            properties: {
-                organismo: { type: "string", description: "Nombre exacto o ID numerico del organismo (usar listar_organismos)." },
-                fecha_desde: { type: "string", description: "Fecha inicio DD/MM/AAAA." },
-                fecha_hasta: { type: "string", description: "Fecha fin DD/MM/AAAA." },
-                texto_busqueda: { type: "string", description: "Palabras clave a buscar en el texto." },
-                tipo_registro: { type: "string", enum: ["sentencias", "resoluciones"], description: "Default: sentencias." },
-                max_paginas: { type: "number", description: "Paginas maximas a recorrer. Default: 3." },
-                max_documentos: { type: "number", description: "Documentos maximos a retornar. Default: 20." },
-            },
-        },
-    },
-    {
-        name: "guardar_documentos_en_disco",
-        description: "Guarda los documentos obtenidos con buscar_documentos en archivos .txt en disco.",
-        inputSchema: {
-            type: "object",
-            required: ["documentos", "organismo"],
-            properties: {
-                documentos: { type: "array", description: "Lista de documentos (resultado de buscar_documentos)." },
-                organismo: { type: "string" },
-                tipo_registro: { type: "string", enum: ["sentencias", "resoluciones"] },
-                carpeta_base: { type: "string", description: "Carpeta raiz de salida. Default: 'sentencias judiciales'." },
-            },
-        },
-    },
-];
+export const server = new McpServer({
+    name: "scba-mcp",
+    version: "2.1.0",
+});
 
-async function callTool(name, args) {
-    switch (name) {
-        case "listar_tipos_registro": return listarTiposRegistro();
-        case "listar_organismos": return listarOrganismos(args.tipo_registro ?? "sentencias");
-        case "buscar_documentos": return buscarDocumentos(args);
-        case "guardar_documentos_en_disco": return guardarDocumentosEnDisco(args);
-        default: throw new Error(`Tool desconocida: ${name}`);
-    }
-}
+export function registerAllTools(server) {
 
-async function main() {
-    const server = new Server(
-        { name: "scba-mcp", version: "2.0.0" },
-        { capabilities: { tools: {} } }
+    server.tool(
+        "listar_tipos_registro",
+        "Devuelve los tipos de registro disponibles en la SCBA: Sentencias y Resoluciones.",
+        {},
+        async () => {
+            const tipos = [
+                { valor: "sentencias",   etiqueta: "Sentencias"   },
+                { valor: "resoluciones", etiqueta: "Resoluciones" },
+            ];
+            return { content: [{ type: "text", text: JSON.stringify(tipos, null, 2) }] };
+        }
     );
 
-    server.setRequestHandler(ListToolsRequestSchema, async () => ({
-        tools: TOOLS.map((t) => ({
-            name: t.name,
-            description: t.description,
-            inputSchema: t.inputSchema,
-        })),
-    }));
-
-    server.setRequestHandler(CallToolRequestSchema, async (request) => {
-        const { name, arguments: args = {} } = request.params;
-        try {
-            const result = await callTool(name, args);
-            return {
-                content: [{
-                    type: "text",
-                    text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
-                }],
-            };
-        } catch (e) {
-            return {
-                content: [{ type: "text", text: `Error: ${e.message}` }],
-                isError: true,
-            };
+    server.tool(
+        "listar_organismos",
+        "Devuelve la lista de organismos judiciales disponibles en sentencias.scba.gov.ar para el tipo de registro indicado. Llamar antes de buscar_documentos para obtener los nombres y IDs exactos.",
+        {
+            tipo_registro: z.enum(["sentencias", "resoluciones"])
+                .optional()
+                .default("sentencias")
+                .describe("Tipo de registro. Default: sentencias."),
+        },
+        async (args) => {
+            try {
+                const lista = await listarOrganismos(args.tipo_registro ?? "sentencias");
+                return { content: [{ type: "text", text: JSON.stringify(lista, null, 2) }] };
+            } catch (e) {
+                return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+            }
         }
-    });
+    );
 
-    process.on("SIGINT", () => process.exit(0));
-    process.on("SIGTERM", () => process.exit(0));
+    server.tool(
+        "buscar_documentos",
+        "Busca sentencias o resoluciones en la SCBA y devuelve el texto completo de cada documento.",
+        {
+            organismo:      z.string().describe("Nombre exacto o ID numerico del organismo (usar listar_organismos)."),
+            fecha_desde:    z.string().describe("Fecha inicio DD/MM/AAAA."),
+            fecha_hasta:    z.string().describe("Fecha fin DD/MM/AAAA."),
+            texto_busqueda: z.string().describe("Palabras clave a buscar en el texto."),
+            tipo_registro:  z.enum(["sentencias", "resoluciones"])
+                .optional().default("sentencias")
+                .describe("Tipo de registro. Default: sentencias."),
+            max_documentos: z.number().optional().default(20)
+                .describe("Documentos maximos a retornar. Default: 20."),
+        },
+        async (args) => {
+            try {
+                const result = await buscarDocumentos(args);
+                return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+            } catch (e) {
+                return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+            }
+        }
+    );
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    process.stderr.write("[scba] conectado y escuchando\n");
+    server.tool(
+        "guardar_documentos_en_disco",
+        "Guarda los documentos obtenidos con buscar_documentos en archivos .txt en disco.",
+        {
+            documentos:    z.array(z.any()).describe("Lista de documentos (resultado de buscar_documentos)."),
+            organismo:     z.string().describe("Nombre del organismo, usado para nombrar la carpeta de destino."),
+            tipo_registro: z.enum(["sentencias", "resoluciones"])
+                .optional().default("sentencias"),
+            carpeta_base:  z.string().optional().default("sentencias judiciales")
+                .describe("Carpeta raiz de salida. Default: 'sentencias judiciales'."),
+        },
+        async (args) => {
+            try {
+                const result = await guardarDocumentosEnDisco(args);
+                return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+            } catch (e) {
+                return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+            }
+        }
+    );
 }
 
-main().catch((e) => {
-    process.stderr.write(`[scba] error fatal: ${e.message}\n`);
-    process.exit(1);
-});
+registerAllTools(server);
+
+// Guard de entorno identico al resto del proyecto (bora.js, tfn.js, etc.)
+if (
+    typeof process !== "undefined" &&
+    !process.env.VERCEL &&
+    !process.env.NEXT_RUNTIME
+) {
+    const transport = new StdioServerTransport();
+    server.connect(transport).catch((err) => {
+        process.stderr.write(`[scba] error fatal: ${err.message}\n`);
+        process.exit(1);
+    });
+    process.stderr.write("[scba] conectado y escuchando\n");
+}

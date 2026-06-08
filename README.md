@@ -71,11 +71,13 @@ Abrir el símbolo del sistema (CMD) y ejecutar los siguientes comandos uno por u
 cd C:\legal-hub
 npm install
 cd servers\legal-mcp
-npm install
+set PUPPETEER_SKIP_DOWNLOAD=true && npm install
 cd ..\saij-mcp
 npm install
 cd ..\..
 ```
+
+> **Nota:** `PUPPETEER_SKIP_DOWNLOAD=true` evita que se descargue Chromium durante la instalación (no es necesario para el funcionamiento del hub). En Mac/Linux reemplazar `set` por `export`.
 
 ### Paso 3 - Configurar Claude Desktop
 
@@ -144,6 +146,8 @@ Este hub fue diseñado desde el principio para correr localmente en la computado
 **Cómo funciona:** el hub corre en tu propia computadora mediante transporte stdio, que es comunicación directa entre Claude Desktop y el servidor sin pasar por ninguna red externa. Las consultas nunca salen de tu máquina hacia un servidor intermediario. Los conectores consultan únicamente las webs jurídicas oficiales públicas (boletines oficiales, bases de jurisprudencia) y devuelven la respuesta directamente a Claude.
  
 **Qué no hace este hub:** no registra consultas, no las envía a terceros, no tiene capacidad de accionar sobre sistemas externos más allá de consultar las fuentes jurídicas públicas para las que fue diseñado.
+
+**Certificados TLS:** el hub desactiva la verificación de certificados SSL (`NODE_TLS_REJECT_UNAUTHORIZED=0`) para los conectores. Esto es necesario porque varias fuentes jurídicas oficiales argentinas presentan certificados con cadenas incompletas o dominios desactualizados. Al correr enteramente en la máquina local y consultar solo sitios públicos conocidos, el riesgo práctico es mínimo. En entornos corporativos con proxy SSL-inspection, esta configuración puede requerir ajuste.
  
 **Auditoría:** al ser open source, cualquier abogado o su equipo técnico puede leer el código antes de instalarlo y verificar exactamente qué hace. Todo el código está disponible en este repositorio y en los repositorios originales de cada conector listados en la tabla de fuentes.
  

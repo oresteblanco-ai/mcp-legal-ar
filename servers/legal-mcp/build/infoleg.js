@@ -5,9 +5,9 @@ import { z } from "zod";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import https from "https";
-import { pathToFileURL } from "url";
+import { pathToFileURL as _pathToFileURL } from "url";
 import crypto from "crypto";
-import puppeteer from "puppeteer";
+
 const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
@@ -448,6 +448,7 @@ async function searchCentralSolr(keys) {
     return parseSearchResults(html);
 }
 async function fetchWithPuppeteer(url) {
+    const { default: puppeteer } = await import("puppeteer");
     const browser = await puppeteer.launch({
         headless: true,
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
@@ -501,8 +502,8 @@ export function extractTeleologicalJustification(text) {
     const lines = text.split("\n");
     let extracting = false;
     let resultLines = [];
-    const startRegex = /^\s*(vistos?|considerando(s)?)\b/i;
-    const endRegex = /^\s*(el\s+.*?(decreta|resuelve|dispone|sanciona)|por\s+ello,?)\b/i;
+    const startRegex = /^\s*(vistos?|considerando(s)?)\\b/i;
+    const endRegex = /^\s*(el\s+.*?(decreta|resuelve|dispone|sanciona)|por\s+ello,?)\\b/i;
     for (const line of lines) {
         const trimmed = line.trim();
         if (startRegex.test(trimmed)) {
@@ -1313,10 +1314,7 @@ export const server = new McpServer({
 registerAllTools(server);
 registerAllPrompts(server);
 // Stdio startup condition
-const isDirectCliRun = typeof process !== "undefined" &&
-    process.argv[1] &&
-    import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isDirectCliRun && !process.env.VERCEL && !process.env.NEXT_RUNTIME) {
+if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME) {
     const transport = new StdioServerTransport();
     server.connect(transport).catch((err) => {
         console.error("Server connection failed", err);

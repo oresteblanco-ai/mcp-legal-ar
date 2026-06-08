@@ -1089,9 +1089,12 @@ Este servidor es un puente automatizado de información pública legal y no cons
             // 2. If no direct sumario matches are found, use BORA's advanced search targeting Section 4 notices
             if (matchedItems.length === 0) {
                 try {
+                    // FIX: La API de BORA solo acepta secciones [1, 2, 3].
+                    // La sección 4 (marcas/NIC) no está disponible en el endpoint de búsqueda avanzada.
+                    // Se busca en todas las secciones disponibles como fallback.
                     const results = await buscarAvisos({
                         criterio: args.criterio,
-                        seccion: [4],
+                        seccion: [1, 2, 3],
                         fechaDesde: args.fechaDesde,
                         fechaHasta: args.fechaHasta,
                         pagina: args.pagina || 1
@@ -1476,7 +1479,7 @@ export function registerAllPrompts(server) {
 // Register prompts
 registerAllPrompts(server);
 // Connect with stdio (only when run directly and not in Vercel/Next environment)
-if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME && process.env.NODE_ENV !== "production") {
+if (typeof process !== "undefined" && !process.env.VERCEL && !process.env.NEXT_RUNTIME) {
     const transport = new StdioServerTransport();
     server.connect(transport).catch((err) => {
         console.error("Server connection failed", err);
