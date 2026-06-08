@@ -73,19 +73,19 @@ Hacer clic derecho sobre el archivo `setup.ps1` que está en la carpeta raíz de
 
 ### Paso 1 - Descargar el repositorio
 
-Hacer clic en el botón verde **Code** arriba a la derecha y seleccionar **Download ZIP**. Extraer el ZIP en una carpeta, por ejemplo `C:\legal-hub`.
+Hacer clic en el botón verde **Code** arriba a la derecha y seleccionar **Download ZIP**. Extraer el ZIP en una carpeta, por ejemplo `C:\mcp-legal-ar`.
 
 ### Paso 2 - Instalar dependencias
 
 Abrir el símbolo del sistema (CMD) y ejecutar:
 
 ```
-cd C:\legal-hub
+cd C:\mcp-legal-ar
 npm install
 npm install --prefix servers\legal-mcp
 ```
 
-> Si extrajiste el ZIP en otra carpeta, reemplazá `C:\legal-hub` por esa ruta.
+> Si extrajiste el ZIP en otra carpeta, reemplazá `C:\mcp-legal-ar` por esa ruta.
 
 ### Paso 3 - Configurar Claude Desktop
 
@@ -100,7 +100,7 @@ Reemplazar `TU_USUARIO` con el nombre de usuario de Windows. Abrir ese archivo c
 ```json
 "mcp-legal-ar": {
   "command": "node",
-  "args": ["C:\\legal-hub\\build\\index.js"],
+  "args": ["C:\\mcp-legal-ar\\build\\index.js"],
   "env": {
     "NODE_TLS_REJECT_UNAUTHORIZED": "0"
   }
@@ -114,7 +114,7 @@ El archivo completo debería quedar así:
   "mcpServers": {
     "mcp-legal-ar": {
       "command": "node",
-      "args": ["C:\\legal-hub\\build\\index.js"],
+      "args": ["C:\\mcp-legal-ar\\build\\index.js"],
       "env": {
         "NODE_TLS_REJECT_UNAUTHORIZED": "0"
       }
