@@ -19,28 +19,34 @@ Este repositorio no crea ninguna fuente nueva. Unifica conectores desarrollados 
 
 ---
 
-## Fuentes disponibles
+## Arquitectura
 
-### ✅ Operativos
+`mcp-legal-ar` es un servidor proxy MCP. Al iniciarse, levanta cada conector como proceso hijo, registra todas sus herramientas y las expone como un único servidor. Claude Desktop ve un solo conector con todas las herramientas disponibles.
 
-| # | Nombre | Descripción | Herramientas | Crédito |
-|---|--------|-------------|--------------|---------|
-| 1 | **BORA** | Boletín Oficial de la República Argentina | 14 | [voftec/bora-mcp](https://github.com/voftec/bora-mcp) |
-| 2 | **BOPBA** | Boletín Oficial de la Provincia de Buenos Aires | 15 | [voftec/bopba-mcp](https://github.com/voftec/bopba-mcp) |
-| 3 | **InfoLeg** | Legislación nacional | 20 | [voftec/InfoLeg-MCP](https://github.com/voftec/InfoLeg-MCP) |
-| 4 | **Normativa PBA** | Legislación provincial de Buenos Aires | 9 | [voftec/normativapba-mcp](https://github.com/voftec/normativapba-mcp) |
-| 5 | **JUBA** | Jurisprudencia SCBA y cámaras PBA | 21 | [voftec/juba-mcp](https://github.com/voftec/juba-mcp) |
-| 6 | **PTN** | Dictámenes de la Procuración del Tesoro | 22 | [voftec/ptn-mcp](https://github.com/voftec/ptn-mcp) |
-| 7 | **TFN** | Tribunal Fiscal de la Nación | 15 | [voftec/tfn-mcp](https://github.com/voftec/tfn-mcp) |
-| 8 | **SCBA** | Sentencias y resoluciones de la Suprema Corte de Buenos Aires | 4 | [FacundoEmanuel/scba-mcp-server](https://github.com/FacundoEmanuel/scba-mcp-server) |
+```
+Claude Desktop
+     └── mcp-legal-ar (proxy)
+           ├── bora__*         → proceso hijo Node
+           ├── bopba__*        → proceso hijo Node
+           ├── infoleg__*      → proceso hijo Node
+           ├── normativapba__* → proceso hijo Node
+           ├── juba__*         → proceso hijo Node
+           ├── ptn__*          → proceso hijo Node
+           ├── tfn__*          → proceso hijo Node
+           └── scba__*         → proceso hijo Node
+```
 
-### 🔧 En desarrollo
+---
 
-| # | Nombre | Descripción | Estado |
-|---|--------|-------------|--------|
-| 9 | **SAIJ** | Sistema Argentino de Información Jurídica (330.000+ documentos) | Requiere autenticación de sesión |
-| 10 | **PJN Expedientes** | Estado procesal de causas federales | Requiere resolución de CAPTCHA |
-| 11 | **PJN Jurisprudencia** | Fallos y sentencias federales | Requiere resolución de CAPTCHA |
+## Seguridad y privacidad
+
+**Transporte local (stdio).** El hub se comunica con Claude Desktop directamente en tu máquina, sin pasar por ningún servidor intermediario. Las consultas no salen hacia infraestructura de terceros.
+
+**Solo lectura.** El hub no escribe archivos, no ejecuta comandos y no actúa sobre ningún endpoint. No registra consultas ni las envía a ningún destino externo.
+
+**Auditable.** El código fuente completo está en GitHub. Cualquier abogado o profesional de seguridad puede verificar exactamente qué hace cada conector antes de instalarlo.
+
+**Certificados TLS:** cada conector usa validación TLS estándar. La única excepción es SCBA (`sentencias.scba.gov.ar`), cuyo servidor oficial presenta un certificado con cadena de confianza incompleta. Para ese conector la verificación está desactivada de forma aislada dentro de su propio cliente HTTP, sin afectar al resto del stack. El tráfico involucrado es exclusivamente de lectura de jurisprudencia pública, sin credenciales ni datos del usuario.
 
 ---
 
@@ -86,7 +92,6 @@ cd C:\mcp-legal-ar
 npm install
 npm install --prefix servers\legal-mcp
 ```
-
 
 ### Paso 3 - Configurar Claude Desktop
 
@@ -153,34 +158,28 @@ Algunos conectores dependen de que las webs oficiales estén disponibles. Si una
 
 ---
 
-## Seguridad y privacidad
+## Fuentes disponibles
 
-**Transporte local (stdio).** El hub se comunica con Claude Desktop directamente en tu máquina, sin pasar por ningún servidor intermediario. Las consultas no salen hacia infraestructura de terceros.
+### ✅ Operativos
 
-**Solo lectura.** El hub no escribe archivos, no ejecuta comandos y no actúa sobre ningún endpoint. No registra consultas ni las envía a ningún destino externo.
+| # | Nombre | Descripción | Herramientas | Crédito |
+|---|--------|-------------|--------------|---------|
+| 1 | **BORA** | Boletín Oficial de la República Argentina | 14 | [voftec/bora-mcp](https://github.com/voftec/bora-mcp) |
+| 2 | **BOPBA** | Boletín Oficial de la Provincia de Buenos Aires | 15 | [voftec/bopba-mcp](https://github.com/voftec/bopba-mcp) |
+| 3 | **InfoLeg** | Legislación nacional | 20 | [voftec/InfoLeg-MCP](https://github.com/voftec/InfoLeg-MCP) |
+| 4 | **Normativa PBA** | Legislación provincial de Buenos Aires | 9 | [voftec/normativapba-mcp](https://github.com/voftec/normativapba-mcp) |
+| 5 | **JUBA** | Jurisprudencia SCBA y cámaras PBA | 21 | [voftec/juba-mcp](https://github.com/voftec/juba-mcp) |
+| 6 | **PTN** | Dictámenes de la Procuración del Tesoro | 22 | [voftec/ptn-mcp](https://github.com/voftec/ptn-mcp) |
+| 7 | **TFN** | Tribunal Fiscal de la Nación | 15 | [voftec/tfn-mcp](https://github.com/voftec/tfn-mcp) |
+| 8 | **SCBA** | Sentencias y resoluciones de la Suprema Corte de Buenos Aires | 4 | [FacundoEmanuel/scba-mcp-server](https://github.com/FacundoEmanuel/scba-mcp-server) |
 
-**Auditable.** El código fuente completo está en GitHub. Cualquier abogado o profesional de seguridad puede verificar exactamente qué hace cada conector antes de instalarlo.
+### 🔧 En desarrollo
 
-**Certificados TLS:** cada conector usa validación TLS estándar. La única excepción es SCBA (`sentencias.scba.gov.ar`), cuyo servidor oficial presenta un certificado con cadena de confianza incompleta. Para ese conector la verificación está desactivada de forma aislada dentro de su propio cliente HTTP, sin afectar al resto del stack. El tráfico involucrado es exclusivamente de lectura de jurisprudencia pública, sin credenciales ni datos del usuario.
-
----
-
-## Arquitectura
-
-`mcp-legal-ar` es un servidor proxy MCP. Al iniciarse, levanta cada conector como proceso hijo, registra todas sus herramientas y las expone como un único servidor. Claude Desktop ve un solo conector con todas las herramientas disponibles.
-
-```
-Claude Desktop
-     └── mcp-legal-ar (proxy)
-           ├── bora__*         → proceso hijo Node
-           ├── bopba__*        → proceso hijo Node
-           ├── infoleg__*      → proceso hijo Node
-           ├── normativapba__* → proceso hijo Node
-           ├── juba__*         → proceso hijo Node
-           ├── ptn__*          → proceso hijo Node
-           ├── tfn__*          → proceso hijo Node
-           └── scba__*         → proceso hijo Node
-```
+| # | Nombre | Descripción | Estado |
+|---|--------|-------------|--------|
+| 9 | **SAIJ** | Sistema Argentino de Información Jurídica (330.000+ documentos) | Requiere autenticación de sesión |
+| 10 | **PJN Expedientes** | Estado procesal de causas federales | Requiere resolución de CAPTCHA |
+| 11 | **PJN Jurisprudencia** | Fallos y sentencias federales | Requiere resolución de CAPTCHA |
 
 ---
 
