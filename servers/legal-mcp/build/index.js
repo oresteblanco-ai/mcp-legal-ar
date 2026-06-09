@@ -29,12 +29,6 @@ function resolveNode() {
 const NODE = resolveNode();
 
 // ---------------------------------------------------------------------------
-// FIX BUG 6: Todos los conectores heredan NODE_TLS_REJECT_UNAUTHORIZED=0
-// para uniformidad. SCBA y SAIJ también lo necesitan.
-// ---------------------------------------------------------------------------
-const TLS_ENV = { NODE_TLS_REJECT_UNAUTHORIZED: "0" };
-
-// ---------------------------------------------------------------------------
 // Timeouts por conector (ms). SCBA y pjnjuris hacen scraping pesado.
 // FIX BUG 4: timeouts diferenciados en lugar de 15 s fijo para todos.
 // ---------------------------------------------------------------------------
@@ -59,17 +53,17 @@ function stripInternalPrefix(prefix, toolName) {
 }
 
 const CONNECTORS = [
-    { prefix: "bora",         command: NODE, args: [path.join(LEGAL_MCP, "build", "bora.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
-    { prefix: "bopba",        command: NODE, args: [path.join(LEGAL_MCP, "build", "bopba.js")],        cwd: LEGAL_MCP, env: TLS_ENV },
-    { prefix: "infoleg",      command: NODE, args: [path.join(LEGAL_MCP, "build", "infoleg.js")],      cwd: LEGAL_MCP, env: TLS_ENV },
-    { prefix: "normativapba", command: NODE, args: [path.join(LEGAL_MCP, "build", "normativapba.js")], cwd: LEGAL_MCP, env: TLS_ENV },
-    { prefix: "juba",         command: NODE, args: [path.join(LEGAL_MCP, "build", "juba.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
-    // DESHABILITADO - reCAPTCHA obligatorio: { prefix: "pjn",      command: NODE, args: [path.join(LEGAL_MCP, "build", "pjn.js")],      cwd: LEGAL_MCP, env: TLS_ENV },
-    // DESHABILITADO - reCAPTCHA obligatorio: { prefix: "pjnjuris", command: NODE, args: [path.join(LEGAL_MCP, "build", "pjnjuris.js")], cwd: LEGAL_MCP, env: TLS_ENV },
-    { prefix: "ptn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "ptn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
-    { prefix: "tfn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "tfn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
-    // DESHABILITADO - HTTP 403 anti-bot: { prefix: "saij", command: NODE, args: [path.join(SAIJ_DIR, "build", "index.js")], cwd: SAIJ_DIR, env: TLS_ENV },
-    { prefix: "scba",         command: NODE, args: [path.join(LEGAL_MCP, "build", "scba.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "bora",         command: NODE, args: [path.join(LEGAL_MCP, "build", "bora.js")],         cwd: LEGAL_MCP },
+    { prefix: "bopba",        command: NODE, args: [path.join(LEGAL_MCP, "build", "bopba.js")],        cwd: LEGAL_MCP },
+    { prefix: "infoleg",      command: NODE, args: [path.join(LEGAL_MCP, "build", "infoleg.js")],      cwd: LEGAL_MCP },
+    { prefix: "normativapba", command: NODE, args: [path.join(LEGAL_MCP, "build", "normativapba.js")], cwd: LEGAL_MCP },
+    { prefix: "juba",         command: NODE, args: [path.join(LEGAL_MCP, "build", "juba.js")],         cwd: LEGAL_MCP },
+    // DESHABILITADO - reCAPTCHA obligatorio: { prefix: "pjn",      command: NODE, args: [path.join(LEGAL_MCP, "build", "pjn.js")],      cwd: LEGAL_MCP },
+    // DESHABILITADO - reCAPTCHA obligatorio: { prefix: "pjnjuris", command: NODE, args: [path.join(LEGAL_MCP, "build", "pjnjuris.js")], cwd: LEGAL_MCP },
+    { prefix: "ptn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "ptn.js")],          cwd: LEGAL_MCP },
+    { prefix: "tfn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "tfn.js")],          cwd: LEGAL_MCP },
+    // DESHABILITADO - HTTP 403 anti-bot: { prefix: "saij", command: NODE, args: [path.join(SAIJ_DIR, "build", "index.js")], cwd: SAIJ_DIR },
+    { prefix: "scba",         command: NODE, args: [path.join(LEGAL_MCP, "build", "scba.js")],         cwd: LEGAL_MCP }, // TLS manejado internamente via https.Agent aislado
 ];
 
 class ChildMcpClient {

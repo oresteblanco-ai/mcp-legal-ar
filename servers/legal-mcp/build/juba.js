@@ -4,8 +4,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import axios from "axios";
 import * as cheerio from "cheerio";
-import https from "https";
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+import { installTlsFallback } from "./tls-fallback.js";
+// TLS estricto por defecto; fallback inseguro solo ante cert roto (ver tls-fallback.js).
+const httpsAgent = installTlsFallback(axios, "juba");
 export const server = new McpServer({
     name: "juba-mcp",
     version: "1.0.0"

@@ -9,14 +9,16 @@ import fs from "node:fs";
 import path from "node:path";
 import https from "https";
 import { fileURLToPath } from "url";
+import { installTlsFallback } from "./tls-fallback.js";
 
 // FIX: anclar rutas de caché al directorio del módulo, no a process.cwd().
 // process.cwd() varía según el cwd del proceso hijo spawneado por el hub.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-const axiosClient = axios.create({ httpsAgent });
+const axiosClient = axios.create();
+// TLS estricto por defecto; fallback inseguro solo ante cert roto (ver tls-fallback.js).
+const httpsAgent = installTlsFallback(axiosClient, "bopba");
 // Tasas updater functions
 const PDF_URL = 'https://tasador.boletinoficial.gba.gob.ar/pdfs/Flyer%20Tasas%20BO.pdf';
 const CACHE_FILE = path.join(__dirname, '../data/tasas-cache.json');

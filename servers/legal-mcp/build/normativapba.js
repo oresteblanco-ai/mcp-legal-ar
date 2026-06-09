@@ -4,11 +4,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import axios from "axios";
 import * as cheerio from "cheerio";
-import https from "https";
-// Configuración para ignorar errores de certificados SSL (comunes en webs del gobierno)
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-});
+import { installTlsFallback } from "./tls-fallback.js";
+// TLS estricto por defecto; fallback inseguro solo ante cert roto (ver tls-fallback.js).
+// Antes: agente inseguro fijo "para webs del gobierno".
+const httpsAgent = installTlsFallback(axios, "normativapba");
 // Initialize the MCP Server
 const server = new McpServer({
     name: "normativaPBA",

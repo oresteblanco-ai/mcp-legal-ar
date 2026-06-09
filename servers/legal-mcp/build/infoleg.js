@@ -4,12 +4,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import axios from "axios";
 import * as cheerio from "cheerio";
-import https from "https";
 import crypto from "crypto";
+import { installTlsFallback } from "./tls-fallback.js";
 
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-});
+// TLS estricto por defecto; fallback inseguro solo ante cert roto (ver tls-fallback.js).
+const httpsAgent = installTlsFallback(axios, "infoleg");
 const OFFICIAL_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

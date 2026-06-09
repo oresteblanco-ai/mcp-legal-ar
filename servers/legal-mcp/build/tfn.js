@@ -4,11 +4,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import axios from "axios";
 import https from "https";
+import { installTlsFallback } from "./tls-fallback.js";
 
 export const stringOrNumberOptional = z.union([z.string(), z.number()]).transform(val => String(val)).optional();
 
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-const axiosClient = axios.create({ httpsAgent });
+const axiosClient = axios.create();
+// TLS estricto por defecto; fallback inseguro solo ante cert roto (ver tls-fallback.js).
+const httpsAgent = installTlsFallback(axiosClient, "tfn");
 
 const TFN_BASE_URL = "https://jurisprudenciatfn.mecon.gob.ar";
 const API_CANDIDATES = [
@@ -91,6 +93,14 @@ function formatFallo(r, idx, incluirTexto = false) {
     return md;
 }
 
+// Convierte DD/MM/YYYY -> YYYY-MM-DD para la API. Devuelve null si el input es falsy o invalido.
+function toISODate(ddmmyyyy) {
+    if (!ddmmyyyy) return null;
+    const m = String(ddmmyyyy).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return ddmmyyyy; // ya viene en otro formato, pasar tal cual
+    return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
 export async function buscarResoluciones(args) {
     const requestBody = {
         query: args.criterio || "",
@@ -102,8 +112,8 @@ export async function buscarResoluciones(args) {
         salas: args.sala ? [args.sala] : [],
         vocalias: args.vocalia ? [parseInt(args.vocalia)] : [],
         competencias: args.competencia ? [args.competencia] : [],
-        fecha_desde: args.fechaDesde || null,
-        fecha_hasta: args.fechaHasta || null,
+        fecha_desde: toISODate(args.fechaDesde) || null,
+        fecha_hasta: toISODate(args.fechaHasta) || null,
         regulacion_honorarios: null,
         limit: args.limit || 100
     };
@@ -291,7 +301,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_buscar_resolucion_por_expediente",
+    server.tool("buscar_resolucion_por_expediente",
         "Busca una resolucion especifica del TFN por su numero de expediente exacto.",
         {
             numero_expediente: z.string().describe("Numero de expediente (ej. '12345-67' o 'TFN-12345/2020')."),
@@ -316,7 +326,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_buscar_resolucion_por_caratula",
+    server.tool("buscar_resolucion_por_caratula",
         "Busca resoluciones del TFN filtrando por el nombre de las partes involucradas.",
         {
             caratula: z.string().describe("Nombre de las partes o razon social."),
@@ -341,7 +351,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_obtener_resumen_ia",
+    server.tool("obtener_resumen_ia",
         "Obtiene el objeto, doctrinas y texto completo de una resolucion especifica del TFN.",
         {
             id_resolucion: z.string().describe("ID de la resolucion (campo registro o fallo_id).")
@@ -378,7 +388,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_descargar_resolucion_pdf",
+    server.tool("descargar_resolucion_pdf",
         "Descarga el PDF de una resolucion del TFN por su ID.",
         {
             id_resolucion: z.string().describe("ID de la resolucion (registro o fallo_id).")
@@ -415,7 +425,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_buscar_por_hechos",
+    server.tool("buscar_por_hechos",
         "Busca jurisprudencia del TFN por hechos del caso en lenguaje natural.",
         {
             consulta: z.string().describe("Consulta en lenguaje natural sobre los hechos del caso"),
@@ -451,7 +461,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_buscar_por_sumarios",
+    server.tool("buscar_por_sumarios",
         "Busca jurisprudencia del TFN por sumarios/doctrinas de las resoluciones.",
         {
             consulta: z.string().describe("Consulta sobre los sumarios o doctrinas"),
@@ -487,7 +497,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_obtener_filtros",
+    server.tool("obtener_filtros",
         "Obtiene los filtros disponibles para busqueda en el TFN (tribunales, salas, vocalias, competencias).",
         {},
         async () => {
@@ -513,7 +523,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_obtener_ultimos_casos",
+    server.tool("obtener_ultimos_casos",
         "Obtiene los casos mas recientes publicados en el TFN.",
         {
             limit: z.number().optional().default(10).describe("Cantidad de casos (maximo 50)")
@@ -538,7 +548,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_buscar_ultimos_impositivos",
+    server.tool("buscar_ultimos_impositivos",
         "Busca fallos impositivos recientes del TFN.",
         {
             criterio: z.string().optional().describe("Palabra clave (ej. 'IVA', 'Ganancias')"),
@@ -560,7 +570,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_buscar_ultimos_aduaneros",
+    server.tool("buscar_ultimos_aduaneros",
         "Busca fallos aduaneros recientes del TFN.",
         {
             criterio: z.string().optional().describe("Palabra clave (ej. 'importacion', 'valoracion aduanera')"),
@@ -582,7 +592,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_verificar_vigencia",
+    server.tool("verificar_vigencia",
         "Verifica la disponibilidad y datos de un fallo en el sistema del TFN.",
         {
             id_fallo: z.string().describe("ID del fallo (registro o fallo_id)")
@@ -612,7 +622,7 @@ export function registerAllTools(server) {
         }
     );
 
-    server.tool("tfn_buscar_antecedentes",
+    server.tool("buscar_antecedentes",
         "Busca antecedentes jurisprudenciales sobre un tema especifico del TFN.",
         {
             tema: z.string().describe("Tema o doctrina a buscar (ej. 'responsabilidad solidaria', 'prescripcion', 'interes resarcitorio')"),

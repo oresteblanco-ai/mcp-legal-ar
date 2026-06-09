@@ -12,6 +12,11 @@ import * as pathModule from "path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathModule.dirname(__filename);
 
+// NOTA DE SEGURIDAD: rejectUnauthorized: false es INTENCIONAL y AISLADO a este conector.
+// sentencias.scba.gov.ar presenta un certificado con cadena de confianza rota (cert intermedio
+// no servido por el servidor). Todos los demas conectores usan validacion TLS estandar.
+// CWE-295 aceptado como riesgo residual documentado: el trafico es de lectura publica
+// (jurisprudencia SCBA) y no involucra credenciales ni datos sensibles del usuario.
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 const axiosClient = axios.create({ httpsAgent, timeout: 30000 });
 

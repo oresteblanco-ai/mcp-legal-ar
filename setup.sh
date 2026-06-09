@@ -128,10 +128,7 @@ if "mcpServers" not in config:
 
 config["mcpServers"]["mcp-legal-ar"] = {
     "command": node_exe,
-    "args": [entry_point],
-    "env": {
-        "NODE_TLS_REJECT_UNAUTHORIZED": "0"
-    }
+    "args": [entry_point]
 }
 
 with open(config_path, "w", encoding="utf-8") as f:

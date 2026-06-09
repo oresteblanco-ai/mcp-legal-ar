@@ -114,10 +114,7 @@ Reemplazar `TU_USUARIO` con el nombre de usuario de Windows. Abrir ese archivo c
 ```json
 "mcp-legal-ar": {
   "command": "node",
-  "args": ["C:\\mcp-legal-ar\\build\\index.js"],
-  "env": {
-    "NODE_TLS_REJECT_UNAUTHORIZED": "0"
-  }
+  "args": ["C:\\mcp-legal-ar\\build\\index.js"]
 }
 ```
 
@@ -128,10 +125,7 @@ El archivo completo debería quedar así:
   "mcpServers": {
     "mcp-legal-ar": {
       "command": "node",
-      "args": ["C:\\mcp-legal-ar\\build\\index.js"],
-      "env": {
-        "NODE_TLS_REJECT_UNAUTHORIZED": "0"
-      }
+      "args": ["C:\\mcp-legal-ar\\build\\index.js"]
     }
   }
 }
@@ -169,7 +163,7 @@ El hub corre en tu propia computadora mediante transporte stdio - comunicación 
 
 El hub no registra consultas, no las envía a terceros, no tiene capacidad de accionar sobre sistemas externos más allá de consultar las fuentes jurídicas públicas para las que fue diseñado.
 
-**Certificados TLS:** el hub desactiva la verificación de certificados SSL (`NODE_TLS_REJECT_UNAUTHORIZED=0`). Esto es necesario porque varias fuentes jurídicas oficiales argentinas presentan certificados con cadenas incompletas. Al correr enteramente en la máquina local y consultar solo sitios públicos conocidos, el riesgo práctico es mínimo.
+**Certificados TLS:** cada conector usa validación TLS estándar. La única excepción es SCBA (`sentencias.scba.gov.ar`), cuyo servidor oficial presenta un certificado con cadena de confianza incompleta. Para ese conector la verificación está desactivada de forma aislada dentro de su propio cliente HTTP, sin afectar al resto del stack. El tráfico involucrado es exclusivamente de lectura de jurisprudencia pública, sin credenciales ni datos del usuario.
 
 ---
 

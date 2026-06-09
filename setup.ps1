@@ -168,9 +168,6 @@ if (-not $config.PSObject.Properties["mcpServers"]) {
 $hubEntry = [PSCustomObject]@{
     command = $nodeExe
     args    = @($entryPoint)
-    env     = [PSCustomObject]@{
-        NODE_TLS_REJECT_UNAUTHORIZED = "0"
-    }
 }
 $config.mcpServers | Add-Member -NotePropertyName "mcp-legal-ar" -NotePropertyValue $hubEntry -Force
 
