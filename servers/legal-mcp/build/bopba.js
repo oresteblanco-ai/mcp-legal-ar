@@ -265,6 +265,21 @@ export const server = new McpServer({
     name: "argentina-bopba-mcp",
     version: "1.0.0",
 });
+// FIX 2026-06-11: el buscador del BOPBA exige fechas DD/MM/YYYY; con YYYY-MM-DD
+// responde "Los datos ingresados son incorrectos" y 0 resultados (verificado en vivo).
+// Acepta YYYY-MM-DD, DD/MM/YYYY o DD-MM-YYYY y normaliza a DD/MM/YYYY.
+function toBopbaDate(value) {
+    if (!value)
+        return value;
+    const s = String(value).trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m)
+        return `${m[3].padStart(2, "0")}/${m[2].padStart(2, "0")}/${m[1]}`;
+    m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m)
+        return `${m[1].padStart(2, "0")}/${m[2].padStart(2, "0")}/${m[3]}`;
+    return s;
+}
 export const registerAllTools = (server) => {
     server.tool("buscar_boletin", "Busca boletines oficiales usando la página de búsqueda del BOPBA con filtros avanzados", {
         words: z.string().optional().describe("Palabras clave para la búsqueda (search[words])"),
@@ -279,9 +294,9 @@ export const registerAllTools = (server) => {
             if (args?.words)
                 queryParams.append("search[words]", String(args.words));
             if (args?.date_gteq)
-                queryParams.append("search[date_gteq]", String(args.date_gteq));
+                queryParams.append("search[date_gteq]", toBopbaDate(args.date_gteq));
             if (args?.date_lteq)
-                queryParams.append("search[date_lteq]", String(args.date_lteq));
+                queryParams.append("search[date_lteq]", toBopbaDate(args.date_lteq));
             if (args?.section)
                 queryParams.append("search[section]", String(args.section));
             if (args?.sort)
@@ -508,9 +523,9 @@ export const registerAllTools = (server) => {
         try {
             const queryParams = new URLSearchParams();
             if (args?.date_gteq)
-                queryParams.append("date_gteq", String(args.date_gteq));
+                queryParams.append("date_gteq", toBopbaDate(args.date_gteq));
             if (args?.date_lteq)
-                queryParams.append("date_lteq", String(args.date_lteq));
+                queryParams.append("date_lteq", toBopbaDate(args.date_lteq));
             if (args?.page)
                 queryParams.append("page", String(args.page));
             const url = `https://boletinoficial.gba.gob.ar/ediciones-anteriores?${queryParams.toString()}`;
@@ -941,9 +956,9 @@ export const registerAllTools = (server) => {
             const queryParams = new URLSearchParams();
             queryParams.append("search[words]", searchQuery);
             if (dateGteq)
-                queryParams.append("search[date_gteq]", dateGteq);
+                queryParams.append("search[date_gteq]", toBopbaDate(dateGteq));
             if (dateLteq)
-                queryParams.append("search[date_lteq]", dateLteq);
+                queryParams.append("search[date_lteq]", toBopbaDate(dateLteq));
             queryParams.append("utf8", "✔");
             const searchUrl = `https://boletinoficial.gba.gob.ar/buscar?${queryParams.toString()}`;
             const searchResponse = await axiosClient.get(searchUrl, {
@@ -1017,9 +1032,9 @@ export const registerAllTools = (server) => {
             const queryParams = new URLSearchParams();
             queryParams.append("search[words]", allTerms);
             if (args.fecha_desde)
-                queryParams.append("search[date_gteq]", args.fecha_desde);
+                queryParams.append("search[date_gteq]", toBopbaDate(args.fecha_desde));
             if (args.fecha_hasta)
-                queryParams.append("search[date_lteq]", args.fecha_hasta);
+                queryParams.append("search[date_lteq]", toBopbaDate(args.fecha_hasta));
             if (args.seccion)
                 queryParams.append("search[section]", args.seccion);
             queryParams.append("utf8", "✔");

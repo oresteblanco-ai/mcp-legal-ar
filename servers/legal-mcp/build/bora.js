@@ -1043,16 +1043,53 @@ Este servidor es un puente automatizado de información pública legal y no cons
             if (!queryText) {
                 queryText = "judicial"; // fallback
             }
-            const results = await buscarAvisos({
-                criterio: queryText,
-                seccion: [2],
-                fechaDesde: args.fechaDesde,
-                fechaHasta: args.fechaHasta,
-                pagina: args.pagina || 1
-            });
-            if (results.length === 0) {
-                return { content: [{ type: "text", text: `No se encontraron avisos judiciales para la búsqueda judicial '${queryText}'.` }] };
+            // FIX 2026-06-11 (Warning 2 del informe de tests): la Segunda Sección
+            // mezcla rubros comerciales (Avisos Comerciales, Convocatorias,
+            // Transferencias, Balances) con los edictos judiciales, y el ranking
+            // del backend de BORA suele poner los comerciales primero. El campo
+            // details[0] del resultado (aquí "norma") trae la etiqueta del rubro,
+            // así que se filtra por whitelist judicial y se barren páginas
+            // adicionales hasta juntar resultados útiles.
+            const esRubroJudicial = (r) => {
+                const rubro = (r.norma || "").toLowerCase();
+                if (!rubro)
+                    return true; // sin etiqueta: no descartar (puede ser edicto sin rubro)
+                return /edicto|judicial|sucesi|quiebra|concurso|remate|heredero|inhibici/.test(rubro);
+            };
+            const judiciales = [];
+            let escaneados = 0;
+            let descartados = 0;
+            let paginasLeidas = 0;
+            const MAX_PAGINAS = 5;
+            const OBJETIVO = 25;
+            let pagina = args.pagina || 1;
+            while (paginasLeidas < MAX_PAGINAS && judiciales.length < OBJETIVO) {
+                const lote = await buscarAvisos({
+                    criterio: queryText,
+                    seccion: [2],
+                    fechaDesde: args.fechaDesde,
+                    fechaHasta: args.fechaHasta,
+                    pagina
+                });
+                paginasLeidas++;
+                if (lote.length === 0)
+                    break; // no hay más resultados
+                escaneados += lote.length;
+                for (const r of lote) {
+                    if (esRubroJudicial(r))
+                        judiciales.push(r);
+                    else
+                        descartados++;
+                }
+                pagina++;
             }
+            if (judiciales.length === 0) {
+                let msg = `No se encontraron avisos judiciales para la búsqueda '${queryText}'.`;
+                if (descartados > 0)
+                    msg += ` Se escanearon ${escaneados} avisos en ${paginasLeidas} página(s); todos pertenecían a rubros no judiciales (${descartados} descartados, ej. Avisos Comerciales). Pruebe con otro criterio o ajuste el rango de fechas.`;
+                return { content: [{ type: "text", text: msg }] };
+            }
+            const results = judiciales;
             let md = `# Avisos Judiciales BORA - Segunda Sección\n\n`;
             if (args.tipoAviso)
                 md += `*   **Tipo de Aviso:** ${args.tipoAviso.toUpperCase()}\n`;
@@ -1061,7 +1098,7 @@ Este servidor es un puente automatizado de información pública legal y no cons
                 md += `*   **Desde:** ${args.fechaDesde}\n`;
             if (args.fechaHasta)
                 md += `*   **Hasta:** ${args.fechaHasta}\n`;
-            md += `*   **Resultados:** ${results.length}\n\n---\n\n`;
+            md += `*   **Resultados judiciales:** ${results.length} (escaneados ${escaneados} avisos en ${paginasLeidas} página(s); ${descartados} descartados por rubro no judicial)\n\n---\n\n`;
             results.forEach((r, idx) => {
                 md += `### ${idx + 1}. ⚖️ ${r.titulo}\n`;
                 if (r.norma)

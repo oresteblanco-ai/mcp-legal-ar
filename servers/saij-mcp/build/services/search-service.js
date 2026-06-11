@@ -1,3 +1,4 @@
+import axios from "axios";
 import { apiClient } from "./api-client.js";
 import { FilterBuilder, PRESET_FILTERS } from "./filter-builder.js";
 import { SearchResponseSchema, } from "../types/saij.js";
@@ -101,9 +102,200 @@ export class SearchService {
     }
     /**
      * Search the digital library.
+     *
+     * FIX 11/06/2026 (Warning 3 del informe de tests, cerrado): la faceta
+     * "Publicación/Biblioteca digital" del indice de saij.gob.ar esta VACIA
+     * (verificado en vivo: facet-browse con +id:* => total_results 0). El
+     * catalogo real de la Biblioteca Digital de Ediciones SAIJ vive en una
+     * plataforma Omeka aparte: bibliotecadigital.gob.ar (Ministerio de
+     * Justicia). Se busca alli:
+     *   /items/browse?search=<q>&output=json  -> ids + total_results
+     *   /items/browse?search=<q>              -> titulos (HTML, regex)
+     * Los uuid "omeka-item-<id>" NO sirven para saij_get_document: el texto
+     * se lee/descarga desde el enlace de cada item.
      */
     async searchBiblioteca(params) {
-        return this.searchRaw(PRESET_FILTERS.biblioteca_digital || "Publicación/Biblioteca digital", params);
+        const base = "http://www.bibliotecadigital.gob.ar";
+        const q = String(params.query || "").trim();
+        const pageSize = 10; // paginado fijo de Omeka en este sitio
+        const offset = params.offset || 0;
+        const page = Math.floor(offset / pageSize) + 1;
+        const headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" };
+        // Colecciones con ID verificado en vivo (11/06/2026). El browse combina
+        // search + collection sin problemas (probado: search=codigo&collection=20
+        // => 35 resultados, todos collection_id 20).
+        const COLECCIONES = {
+            libros_saij: "20",
+            patrimonio_historico: "13",
+            politica_criminal: "21",
+            en_buena_ley: "33",
+            revistas_saij: "31", // deducido en vivo: los items de las subcolecciones de revistas traen collection_id 31
+        };
+        let col = null;
+        if (params.coleccion !== undefined && params.coleccion !== null && String(params.coleccion).trim() !== "") {
+            const clave = String(params.coleccion).trim().toLowerCase().replace(/\s+/g, "_");
+            col = COLECCIONES[clave] || (/^\d+$/.test(clave) ? clave : null);
+        }
+        const colParams = col ? { collection: col } : {};
+        // Subcoleccion de Revistas SAIJ (element_id 87 del esquema Omeka,
+        // verificado en vivo 11/06/2026; combina con search y con collection).
+        const SUBCOLECCIONES = {
+            derecho_privado: "Derecho Privado",
+            derecho_penal: "Derecho Penal",
+            derecho_publico: "Derecho Público",
+            derechos_humanos: "Derechos Humanos",
+            derecho_del_trabajo: "Derecho del Trabajo",
+            filosofia_del_derecho: "Filosofía del Derecho",
+        };
+        let subcol = null;
+        if (params.subcoleccion !== undefined && params.subcoleccion !== null && String(params.subcoleccion).trim() !== "") {
+            const claveSub = String(params.subcoleccion).trim().toLowerCase()
+                .normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "_");
+            subcol = SUBCOLECCIONES[claveSub] || String(params.subcoleccion).trim();
+        }
+        const advParams = subcol
+            ? {
+                "advanced[0][element_id]": "87",
+                "advanced[0][type]": "is exactly",
+                "advanced[0][terms]": subcol,
+            }
+            : {};
+        // page=1 explicito devolvio respuestas vacias en pruebas; se omite.
+        const pageParams = page > 1 ? { page } : {};
+        // Sin termino, el browse lista el catalogo completo (1438 items al
+        // 11/06/2026), paginado de a 10; util combinado con coleccion o
+        // subcoleccion. Se omite el parametro search vacio.
+        const qParams = q ? { search: q } : {};
+        const jsonRes = await axios.get(`${base}/items/browse`, {
+            params: { ...qParams, output: "json", ...colParams, ...advParams, ...pageParams },
+            headers,
+            timeout: 20000,
+        });
+        const data = typeof jsonRes.data === "string" ? JSON.parse(jsonRes.data) : jsonRes.data;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const total = data?.total_results ?? items.length;
+        // Titulos desde el HTML de la misma pagina de resultados (el JSON de
+        // Omeka no incluye metadatos). Si falla, se devuelven igual los enlaces.
+        const titulos = new Map();
+        try {
+            const htmlRes = await axios.get(`${base}/items/browse`, {
+                params: { ...qParams, ...colParams, ...advParams, ...pageParams },
+                headers,
+                timeout: 20000,
+            });
+            const html = String(htmlRes.data);
+            const re = /<a\s+[^>]*href="[^"]*\/items\/show\/(\d+)[^"]*"[^>]*>([^<]+)<\/a>/g;
+            let m;
+            while ((m = re.exec(html)) !== null) {
+                const id = m[1];
+                const texto = m[2].replace(/\s+/g, " ").trim();
+                if (!texto || /^ingresar$/i.test(texto))
+                    continue; // anchors del carrusel de portada
+                if (!titulos.has(id))
+                    titulos.set(id, texto);
+            }
+        }
+        catch {
+            // sin titulos: los enlaces alcanzan para abrir cada item
+        }
+        const results = items.map((it) => ({
+            uuid: `omeka-item-${it.id}`,
+            document_score: 0,
+            document_abstract: JSON.stringify({
+                titulo: titulos.get(String(it.id)) || `Item ${it.id} (titulo no disponible; abrir enlace)`,
+                enlace: `${base}/items/show/${it.id}`,
+                agregado: it.added || null,
+            }),
+        }));
+        return {
+            total_results: total,
+            offset: (page - 1) * pageSize,
+            page_size: pageSize,
+            results,
+            query: q,
+            expanded_query: `${base}/items/browse?${q ? `search=${encodeURIComponent(q)}` : ""}${col ? `&collection=${col}` : ""}${page > 1 ? `&page=${page}` : ""}`.replace("?&", "?"),
+            coleccion: col ? `collection=${col}` : "todas",
+            subcoleccion: subcol || "todas",
+            fuente: "bibliotecadigital.gob.ar (Biblioteca Digital de Ediciones SAIJ, plataforma Omeka)",
+            nota: "Los uuid omeka-item-* no funcionan con saij_get_document; usar el enlace de cada item para leer/descargar el PDF o EPUB.",
+        };
+    }
+    /**
+     * Ficha completa de una obra de la Biblioteca Digital (bibliotecadigital.gob.ar).
+     *
+     * AGREGADO 11/06/2026 (ronda 18): la ficha items/show/{id} trae metadatos
+     * ricos (resumen/sumario del tomo, director, anio, numero, ISSN, temas) y
+     * el enlace de descarga directa del PDF en /files/original/ (verificado en
+     * vivo con el item 1430, "Derecho del Trabajo N° 8"). Parseo por regex
+     * sobre la estructura <h3>Campo</h3>...contenido... del tema Omeka
+     * AvantGarde, con whitelist de campos conocidos (saij-mcp no tiene cheerio).
+     */
+    async getBibliotecaItem(itemId) {
+        const base = "http://www.bibliotecadigital.gob.ar";
+        const id = String(itemId).replace(/^omeka-item-/i, "").trim();
+        if (!/^\d+$/.test(id)) {
+            throw new Error("ID invalido: se espera el numero de item (ej. 1430) o el uuid omeka-item-<n> devuelto por search_biblioteca.");
+        }
+        const url = `${base}/items/show/${id}`;
+        const res = await axios.get(url, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+            timeout: 20000,
+        });
+        const html = String(res.data);
+        const decode = (s) => s
+            .replace(/<[^>]+>/g, " ")
+            .replace(/&nbsp;/gi, " ")
+            .replace(/&amp;/gi, "&")
+            .replace(/&lt;/gi, "<")
+            .replace(/&gt;/gi, ">")
+            .replace(/&quot;/gi, '"')
+            .replace(/&middot;/gi, "·")
+            .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+            .replace(/\bVer (menos|m[aá]s) autores\b/gi, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        const titulo = decode((html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || "").replace(/·\s*Biblioteca Digital\s*$/i, ""));
+        const CAMPOS_VALIDOS = new Set([
+            "Título", "Subtítulo", "Resumen", "Director/a", "Autor/es", "Autor/a",
+            "Editorial", "Año", "Número", "Colección del libro", "Fecha", "Idioma",
+            "Identificador / ID", "ISSN", "ISBN", "Tipo de publicación", "Tema",
+            "Cita bibliográfica", "Descripción", "Materia",
+        ]);
+        const campos = {};
+        const bloques = html.split(/<h3>/i).slice(1);
+        for (const bloque of bloques) {
+            const cierre = bloque.indexOf("</h3>");
+            if (cierre === -1)
+                continue;
+            const nombre = decode(bloque.slice(0, cierre));
+            if (!CAMPOS_VALIDOS.has(nombre))
+                continue;
+            // contenido hasta el proximo encabezado de cualquier nivel o tabla
+            const resto = bloque.slice(cierre + 5);
+            const corte = resto.search(/<h[2-4]|<table/i);
+            const contenido = decode(corte === -1 ? resto : resto.slice(0, corte)).slice(0, 1500);
+            if (contenido && !campos[nombre])
+                campos[nombre] = contenido;
+        }
+        const archivos = [];
+        const vistos = new Set();
+        const reArchivo = /href="((?:https?:\/\/[^"]*)?\/files\/original\/[^"]+\.(?:pdf|epub))"/gi;
+        let m;
+        while ((m = reArchivo.exec(html)) !== null) {
+            const enlace = m[1].startsWith("http") ? m[1] : `${base}${m[1]}`;
+            if (vistos.has(enlace))
+                continue;
+            vistos.add(enlace);
+            archivos.push({ nombre: decodeURIComponent(enlace.split("/").pop() || ""), enlace });
+        }
+        return {
+            id,
+            titulo: titulo || campos["Título"] || `Item ${id}`,
+            ficha: url,
+            campos,
+            archivos,
+            fuente: "bibliotecadigital.gob.ar (Biblioteca Digital de Ediciones SAIJ, plataforma Omeka)",
+        };
     }
     /**
      * Retrieves the latest legal news (novedades).

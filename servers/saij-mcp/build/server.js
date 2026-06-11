@@ -63,7 +63,7 @@ export class SaijMcpServer {
                     },
                     {
                         name: "saij_search_biblioteca",
-                        description: "Busca en la Biblioteca Digital del SAIJ (patrimonio histórico, antecedentes, etc.).",
+                        description: "Busca libros, codigos comentados y revistas en la Biblioteca Digital de Ediciones SAIJ (bibliotecadigital.gob.ar). Devuelve titulo y enlace; el uuid omeka-item-* no sirve para saij_get_document.",
                         inputSchema: zodToJsonSchema(SearchParamsSchema),
                     },
                     {
