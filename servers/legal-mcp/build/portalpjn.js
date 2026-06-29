@@ -237,7 +237,8 @@ server.tool(
             const buf = Buffer.from(await r.arrayBuffer());
             const carpeta = args.carpeta_destino || path.join(os.homedir(), "Downloads");
             fs.mkdirSync(carpeta, { recursive: true });
-            const nombre = (args.nombre_archivo || `portalpjn-evento-${args.evento_id}.pdf`).replace(/[^\w.\-]+/g, "_");
+            let nombre = (args.nombre_archivo || `portalpjn-evento-${args.evento_id}.pdf`).replace(/[^\w.\-]+/g, "_");
+            if (!/\.pdf$/i.test(nombre)) nombre += ".pdf";
             const destino = path.join(carpeta, nombre);
             fs.writeFileSync(destino, buf);
             return txt(`PDF guardado: ${destino} (${(buf.length / 1024).toFixed(1)} KB).\nSiguiente paso sugerido del pipeline: extraer texto a MD en actuaciones/ del caso y generar la version anonimizada (ver ficha-anonimizacion del caso).`);

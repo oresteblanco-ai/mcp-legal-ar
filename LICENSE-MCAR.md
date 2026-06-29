@@ -39,7 +39,7 @@ Se entiende por uso comercial, sin caracter taxativo:
 
 Para solicitar licencia comercial:
 
-    contacto: [INSERTAR CONTACTO]
+    contacto: cristianaboitiz@gmail.com
 
 ---
 

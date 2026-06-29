@@ -125,7 +125,10 @@ function check_index_fixes() {
     resolveNode:          s.includes("function resolveNode()"),
     stripInternalPrefix:  s.includes("function stripInternalPrefix("),
     dirname_fix:          s.includes("fileURLToPath(import.meta.url)"),
-    tls_env:              s.includes("NODE_TLS_REJECT_UNAUTHORIZED"),
+    // true = postura segura: TLS_ENV vacio y SIN bypass global activo. (El string
+    // NODE_TLS_REJECT_UNAUTHORIZED puede seguir en un comentario; lo que importa es que
+    // no exista la asignacion de propiedad activa NODE_TLS_REJECT_UNAUTHORIZED: "0".)
+    tls_scoped:           /const TLS_ENV = \{\s*\}/.test(s) && !/NODE_TLS_REJECT_UNAUTHORIZED\s*:\s*["']0["']/.test(s),
     respawn_backoff:      s.includes("_respawnAttempts"),
   };
 }

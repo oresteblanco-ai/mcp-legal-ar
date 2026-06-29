@@ -1074,11 +1074,28 @@ async function fetchCodigoSubdocs(idNorma, tipoTexto = "actualizado") {
         if (!/\.html?$/i.test(href))
             return;
         const key = href.toLowerCase();
-        if (seen.has(key))
+        // Un sub-documento puede estar enlazado dos veces: como link suelto con texto
+        // generico (ej. "SANCION LEY N° 22.415") y dentro de una fila de tabla con el
+        // titulo real (ej. "Titulo Preliminar | Disposiciones generales | arts. 1 a 16").
+        // La fila describe mejor la seccion, asi que se prefiere su label.
+        const $row = $(a).closest("tr");
+        const inRow = $row.length > 0;
+        let label;
+        if (inRow) {
+            const cells = $row.find("td, th").map((_, c) => normalizeText($(c).text())).get().filter(Boolean);
+            label = cells.join(" - ");
+        }
+        label = label || normalizeText($(a).text()) || href.replace(/\.html?$/i, "");
+        if (seen.has(key)) {
+            const prev = entries.find((e) => e.file.toLowerCase() === key);
+            if (prev && inRow && !prev.inRow) {
+                prev.label = label;
+                prev.inRow = true;
+            }
             return;
+        }
         seen.add(key);
-        const label = normalizeText($(a).text()) || href.replace(/\.html?$/i, "");
-        entries.push({ label, file: href, seccion: href.replace(/\.html?$/i, ""), url: dir + href });
+        entries.push({ label, file: href, seccion: href.replace(/\.html?$/i, ""), url: dir + href, inRow });
     });
     // Un articulado normal repite "ARTICULO N" muchas veces; un índice casi nunca.
     const articuloCount = ($.root().text().match(/ART[IÍ]CULO\s+\d/gi) || []).length;
@@ -1251,23 +1268,27 @@ export function registerAllTools(server) {
         pagina: z.number().optional().default(1).describe("Página de resultados")
     }, async (args) => {
         try {
-            // Criterio puramente numérico + tipo o año: el usuario quiere una norma
-            // por número (ej. "4352" + Resolución + 2018), no una búsqueda de texto.
-            // El Solr ordena por fecha y entierra la norma vieja entre novedades; la
-            // búsqueda estructurada la resuelve. (Fix T3.)
+            // Norma por número + tipo o año: el usuario quiere una norma puntual, no una
+            // búsqueda de texto. El Solr ordena por fecha y entierra la norma vieja entre
+            // novedades; la búsqueda estructurada la resuelve. (Fix T2/T3.)
+            // numeroNorma explícito es el disparador más fuerte; si no viene, un criterio
+            // puramente numérico también identifica la norma. Cualquiera de los dos sirve.
             const criterioNumerico = /^\d{1,6}$/.test(args.criterio.trim());
-            if (criterioNumerico && (args.tipoNorma || args.anioNorma) && !args.numeroNorma) {
+            const numeroExplicito = args.numeroNorma
+                ? String(args.numeroNorma).trim()
+                : (criterioNumerico ? args.criterio.trim() : null);
+            if (numeroExplicito && (args.tipoNorma || args.anioNorma)) {
                 try {
                     const est = await searchNormativaOfficial({
                         jurisdiccion: "nacional",
                         tipoNorma: args.tipoNorma,
-                        numeroNorma: args.criterio.trim(),
+                        numeroNorma: numeroExplicito,
                         anioNorma: args.anioNorma,
                         pagina: args.pagina || 1
                     });
                     if (est.results.length > 0) {
                         let output = `# Resultados de Búsqueda en InfoLEG\n\n`;
-                        output += `Se encontraron **${est.results.length}** resultados para ${args.tipoNorma || "norma"} N° ${args.criterio.trim()}${args.anioNorma ? `/${args.anioNorma}` : ""} (búsqueda estructurada):\n\n`;
+                        output += `Se encontraron **${est.results.length}** resultados para ${args.tipoNorma || "norma"} N° ${numeroExplicito}${args.anioNorma ? `/${args.anioNorma}` : ""} (búsqueda estructurada):\n\n`;
                         est.results.forEach((r, idx) => {
                             output += `### ${idx + 1}. ${r.titulo || r.normativa}\n`;
                             if (r.id)

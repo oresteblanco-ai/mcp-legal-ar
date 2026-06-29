@@ -46,6 +46,12 @@ const TIMEOUTS = {
     // portalpjn HITL: arranque de Chromium + login del usuario en SSO +
     // posible reload para renovar token.
     portalpjn: 90000,
+    // juscaba: descargas binarias de sentencias; tope mayor al default de 20s
+    // pero acotado (el AbortController del conector corta a los 60s).
+    juscaba:  60000,
+    // csjn: flujo stateful de 3 pasos (GET consulta + POST buscar + GET paginar)
+    // y, segun maxResultados, varias paginas encadenadas. Tope holgado.
+    csjn:     45000,
 };
 
 // ---------------------------------------------------------------------------
@@ -84,6 +90,16 @@ const CONNECTORS = [
     // logueado + PDF por evento, via API REST api.pjn.gov.ar capturada en vivo
     // (docs/portalpjn-api.md). Login SIEMPRE del usuario (HITL, SSO Keycloak).
     { prefix: "portalpjn",    command: NODE, args: [path.join(LEGAL_MCP, "build", "portalpjn.js")],    cwd: LEGAL_MCP },
+    // juscaba NUEVO 22/6/26 (conector 13): API REST publica del EJE de la Justicia
+    // de la Ciudad (eje.juscaba.gob.ar). Sin login ni captcha. 12 tools, validado
+    // 7/7 contra la API real (ver RECON_JUSCABA_2026-06-22.md).
+    { prefix: "juscaba",      command: NODE, args: [path.join(LEGAL_MCP, "build", "juscaba.js")],      cwd: LEGAL_MCP },
+    // csjn NUEVO 24/6/26 (conector 14): base de Sumarios de la Secretaria de
+    // Jurisprudencia de la CSJN (sjconsulta.csjn.gov.ar). Fetch directo con
+    // cookies de sesion (flujo stateful de 3 pasos: consulta -> buscar ->
+    // paginarSumarios). Pasa el WAF via stack TLS nativo de Node/Windows.
+    // 3 tools. Recon en vivo 24/06/2026 (ver RECON_CSJN_2026-06-24.md).
+    { prefix: "csjn",         command: NODE, args: [path.join(LEGAL_MCP, "build", "csjn.js")],         cwd: LEGAL_MCP },
 ];
 
 class ChildMcpClient {

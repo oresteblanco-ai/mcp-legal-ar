@@ -27,10 +27,18 @@ function resolveNode() {
 const NODE = resolveNode();
 
 // ---------------------------------------------------------------------------
-// FIX BUG 6: Todos los conectores heredan NODE_TLS_REJECT_UNAUTHORIZED=0
-// para uniformidad. SCBA y SAIJ también lo necesitan.
+// TLS: ya NO se desactiva la verificación a nivel de proceso. Antes:
+// NODE_TLS_REJECT_UNAUTHORIZED=0 heredado por todos los hijos (CWE-295: apagaba
+// la validación de certificados para todo el árbol de procesos).
+// Ahora cada conector controla su propia postura, acotada y estricta por defecto:
+//   - bora, bopba, infoleg, normativapba, juba, tfn -> tls-fallback.js
+//     (estricto; reintento sin verificación SOLO ante cert roto real; forzable
+//      por conector con <PREFIX>_TLS_INSECURE=1).
+//   - ptn -> ptn-http.js (mismo patrón).
+//   - scba -> https.Agent({rejectUnauthorized:false}) aislado a su axiosClient.
+// TLS_ENV queda vacío: los hijos heredan el entorno sin el bypass global.
 // ---------------------------------------------------------------------------
-const TLS_ENV = { NODE_TLS_REJECT_UNAUTHORIZED: "0" };
+const TLS_ENV = {};
 
 // ---------------------------------------------------------------------------
 // Timeouts por conector (ms). SCBA y pjnjuris hacen scraping pesado.
@@ -68,8 +76,11 @@ const CONNECTORS = [
     // DESHABILITADO - reCAPTCHA obligatorio, HITL inviable: { prefix: "pjnjuris", command: NODE, args: [path.join(LEGAL_MCP, "build", "pjnjuris.js")], cwd: LEGAL_MCP, env: TLS_ENV },
     { prefix: "ptn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "ptn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
     { prefix: "tfn",          command: NODE, args: [path.join(LEGAL_MCP, "build", "tfn.js")],          cwd: LEGAL_MCP, env: TLS_ENV },
-    // DESHABILITADO - HTTP 403 anti-bot, requiere Puppeteer+Chromium: { prefix: "saij", command: NODE, args: [path.join(LEGAL_MCP, "build", "saij.js")], cwd: LEGAL_MCP, env: TLS_ENV },
+    // REACTIVADO 22/06/2026: Puppeteer ya no se usa (api-client hace request directo con
+    // headers de browser). El 403 era bloqueo por IP no-AR; desde IP argentina responde.
+    { prefix: "saij",         command: NODE, args: [path.join(LEGAL_MCP, "build", "saij.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
     { prefix: "scba",         command: NODE, args: [path.join(LEGAL_MCP, "build", "scba.js")],         cwd: LEGAL_MCP, env: TLS_ENV },
+    { prefix: "juscaba",      command: NODE, args: [path.join(LEGAL_MCP, "build", "juscaba.js")],      cwd: LEGAL_MCP, env: TLS_ENV },
 ];
 
 class ChildMcpClient {

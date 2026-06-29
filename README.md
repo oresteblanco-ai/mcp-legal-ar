@@ -1,6 +1,6 @@
 # mcp-legal-ar
 
-11 conectores jurídicos argentinos integrados en uno solo. Sin servidores externos de terceros. 100% local. Código abierto y auditable.
+14 conectores jurídicos argentinos integrados en uno solo. Sin servidores externos de terceros. 100% local. Código abierto y auditable.
 
 ---
 
@@ -10,6 +10,7 @@ Claude Desktop puede conectarse a bases de datos externas a través de conectore
 
 - **JUBA** - Jurisprudencia de la Suprema Corte de Buenos Aires y cámaras departamentales de la Provincia, con búsqueda por texto libre, tribunal, carátula y período.
 - **SCBA** - Sentencias y resoluciones completas de la Suprema Corte de Buenos Aires, acceso directo al texto del fallo.
+- **CSJN** - Sumarios de jurisprudencia de la Corte Suprema de Justicia de la Nación (Secretaría de Jurisprudencia, 1863-2026), con búsqueda por texto libre, carátula, fecha y tomo de Fallos, análisis documental del fallo y enlace al PDF.
 - **SAIJ** - Sistema Argentino de Información Jurídica del Ministerio de Justicia de la Nación: más de 330.000 documentos entre jurisprudencia federal, nacional y provincial, legislación, doctrina y dictámenes.
 - **PJN Jurisprudencia** - Sumarios de fallos de cámaras nacionales y federales del sistema del Consejo de la Magistratura (sj.pjn.gov.ar), con filtros por materia, sala y período.
 - **BORA** - Boletín Oficial de la República Argentina: normas nacionales, actos administrativos, edictos y avisos oficiales publicados desde 1938.
@@ -19,8 +20,10 @@ Claude Desktop puede conectarse a bases de datos externas a través de conectore
 - **PTN** - Dictámenes de la Procuración del Tesoro de la Nación, fuente principal de doctrina en derecho administrativo federal.
 - **TFN** - Jurisprudencia del Tribunal Fiscal de la Nación en materia impositiva y aduanera.
 - **PJN Consulta** - Estado procesal de expedientes ante el fuero federal, con búsqueda por parte demandada vía sesión de navegador (captcha resuelto por el usuario).
+- **Portal PJN** - Feed de novedades del abogado logueado (despachos y cédulas de todas sus causas) y descarga del PDF de cada evento, vía API del Poder Judicial de la Nación. Requiere login del usuario (sesión HITL por SSO).
+- **JusCABA** - Expediente Judicial Electrónico (EJE) de la Justicia de la Ciudad de Buenos Aires: consulta de causas por parte, número o CUIJ, con encabezado, ficha, partes, actuaciones, verificación de sentencia y descarga de PDF. Acceso público, sin login ni captcha.
 
-Sin este hub, cada fuente requeriría instalar y configurar un conector por separado. Con este hub, se instala uno solo y las 11 fuentes quedan disponibles al mismo tiempo.
+Sin este hub, cada fuente requeriría instalar y configurar un conector por separado. Con este hub, se instala uno solo y las 14 fuentes quedan disponibles al mismo tiempo.
 
 Este repositorio no crea ninguna fuente nueva. Unifica conectores desarrollados por la comunidad argentina de legal tech; el mérito de cada uno corresponde a sus autores originales.
 
@@ -43,7 +46,10 @@ Claude Desktop
            ├── scba__*         → proceso hijo Node
            ├── saij__*         → proceso hijo Node
            ├── pjn__*          → proceso hijo Node (búsqueda dentro del navegador HITL)
-           └── pjnjuris__*     → proceso hijo Node (API REST + captcha HITL)
+           ├── pjnjuris__*     → proceso hijo Node (API REST + captcha HITL)
+           ├── portalpjn__*    → proceso hijo Node (feed de novedades, HITL + SSO)
+           ├── juscaba__*      → proceso hijo Node (API REST pública del EJE CABA)
+           └── csjn__*         → proceso hijo Node (sumarios CSJN, fetch directo con sesión)
 ```
 
 ---
@@ -256,16 +262,18 @@ Algunos conectores dependen de que las webs oficiales estén disponibles. Si una
 |---|--------|-------------|--------------|---------|
 | 1 | **BORA** | Boletín Oficial de la República Argentina | 14 | [voftec/bora-mcp](https://github.com/voftec/bora-mcp) |
 | 2 | **BOPBA** | Boletín Oficial de la Provincia de Buenos Aires | 15 | [voftec/bopba-mcp](https://github.com/voftec/bopba-mcp) |
-| 3 | **InfoLeg** | Legislación nacional | 20 | [voftec/InfoLeg-MCP](https://github.com/voftec/InfoLeg-MCP) |
+| 3 | **InfoLeg** | Legislación nacional | 21 | [voftec/InfoLeg-MCP](https://github.com/voftec/InfoLeg-MCP) |
 | 4 | **Normativa PBA** | Legislación provincial de Buenos Aires | 9 | [voftec/normativapba-mcp](https://github.com/voftec/normativapba-mcp) |
 | 5 | **JUBA** | Jurisprudencia SCBA y cámaras PBA | 21 | [voftec/juba-mcp](https://github.com/voftec/juba-mcp) |
 | 6 | **PTN** | Dictámenes de la Procuración del Tesoro | 22 | [voftec/ptn-mcp](https://github.com/voftec/ptn-mcp) |
 | 7 | **TFN** | Tribunal Fiscal de la Nación | 15 | [voftec/tfn-mcp](https://github.com/voftec/tfn-mcp) |
 | 8 | **SCBA** | Sentencias y resoluciones de la Suprema Corte de Buenos Aires | 4 | [FacundoEmanuel/scba-mcp-server](https://github.com/FacundoEmanuel/scba-mcp-server) |
-| 9 | **PJN Consulta** | Estado procesal de expedientes federales (reescrito 10/6/26: las consultas corren dentro del navegador HITL; captcha resuelto por el usuario; por parte solo DEMANDADO, límite del portal público) | 14 | reescritura propia (estructura original: [voftec](https://github.com/voftec)) |
-| 10 | **SAIJ** | Sistema Argentino de Información Jurídica (jurisprudencia, legislación, doctrina y dictámenes; 330.000+ documentos) | 15 | [Joaquin Escalante](https://github.com/) (reparado 10/6/26: el término de búsqueda va en `r`, no en `s`) |
-| 11 | **PJN Jurisprudencia** | Sumarios de fallos de cámaras nacionales y federales (Sistema de Jurisprudencia del Consejo de la Magistratura, sj.pjn.gov.ar) | 18 | reescritura propia 10/6/26 (API REST + captcha inyectado vía HITL) |
+| 9 | **PJN Consulta** | Estado procesal de expedientes federales (reescrito 10/6/26: las consultas corren dentro del navegador HITL; captcha resuelto por el usuario; por parte solo DEMANDADO, límite del portal público) | 22 | reescritura propia (estructura original: [voftec](https://github.com/voftec)) |
+| 10 | **SAIJ** | Sistema Argentino de Información Jurídica (jurisprudencia, legislación, doctrina y dictámenes; 330.000+ documentos) | 12 | [Joaquin Escalante](https://github.com/) (reparado 10/6/26: el término de búsqueda va en `r`, no en `s`) |
+| 11 | **PJN Jurisprudencia** | Sumarios de fallos de cámaras nacionales y federales (Sistema de Jurisprudencia del Consejo de la Magistratura, sj.pjn.gov.ar) | 26 | reescritura propia 10/6/26 (API REST + captcha inyectado vía HITL) |
 | 12 | **Portal PJN** | Feed de novedades del abogado logueado (despachos D y cédulas N de todas sus causas) + descarga del PDF de cada evento, vía API REST de api.pjn.gov.ar. Login siempre del usuario (HITL, SSO). No presenta escritos por diseño. Ver `docs/portalpjn-api.md` | 7 | desarrollo propio 11/6/26 (API capturada en vivo) |
+| 13 | **JusCABA** | Expediente Judicial Electrónico (EJE) de la Justicia de la Ciudad de Buenos Aires: consulta de causas por parte/número/CUIJ, encabezado, ficha, fuero, partes, actuaciones, verificación de sentencia y descarga de PDF. Acceso público sin login ni captcha | 12 | desarrollo propio 22/6/26 (API del EJE capturada por reconocimiento) |
+| 14 | **CSJN** | Sumarios de jurisprudencia de la Corte Suprema de Justicia de la Nación (Secretaría de Jurisprudencia, 1863-2026): búsqueda por texto/carátula/fecha/tomo de Fallos, análisis documental del fallo (competencia, recurso, sentido, remisión, voces, normas, ministros) y enlace al PDF. Acceso público sin login | 3 | desarrollo propio 24/6/26 (API de sjconsulta.csjn.gov.ar capturada por reconocimiento) |
 
 ---
 
@@ -286,10 +294,11 @@ schtasks /create /tn "mcp-legal-ar actualizar repo" /tr "\"C:\Users\Ximena\mcp-l
 
 ## Créditos
 
-Este repositorio únicamente unifica servidores MCP desarrollados por otros. Todo el mérito de cada conector corresponde a sus autores originales:
+La mayoría de los conectores son servidores MCP de terceros; el mérito de cada uno corresponde a sus autores originales:
 
 - BORA, BOPBA, InfoLeg, Normativa PBA, JUBA, PTN, TFN, PJN Consulta, PJN Jurisprudencia - [Voftec](https://github.com/voftec) *(repositorios originales bajo licencia MIT; ya no disponibles públicamente — ver nota de licencias abajo)*
 - SCBA MCP Server - [FacundoEmanuel](https://github.com/FacundoEmanuel)
+- Portal PJN, JusCABA y CSJN - desarrollo propio de [@abogadoaboitiz](https://x.com/abogadoaboitiz), sin derivar de código de terceros: Portal PJN sobre la API REST de api.pjn.gov.ar; JusCABA sobre la API pública del EJE (eje.juscaba.gob.ar); CSJN sobre la API de la Secretaría de Jurisprudencia (sjconsulta.csjn.gov.ar). Las reescrituras de PJN Consulta y PJN Jurisprudencia, sobre la estructura original de Voftec, también son propias.
 
 Ensamblado por [@abogadoaboitiz](https://x.com/abogadoaboitiz)
 

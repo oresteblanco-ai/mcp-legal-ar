@@ -56,7 +56,7 @@ const CASES = [
     tool: "buscar_norma_por_tipo_numero_anio",
     args: { tipoNorma: "Resolución General", numeroNorma: "4352", anioNorma: "2018" },
     assert: (t) => /317312/.test(t),
-    knownFail: true, // hoy devuelve 0 resultados
+    knownFail: false, // FIXED 22/6: red restaurada; estructurada resuelve 317312
   },
   {
     id: "T3",
@@ -64,7 +64,7 @@ const CASES = [
     tool: "buscar_normativa",
     args: { criterio: "4352", tipoNorma: "Resolución General", anioNorma: "2018" },
     assert: (t) => /317312/.test(t),
-    knownFail: true, // hoy ignora numero/anio y trae feed 2026
+    knownFail: false, // FIXED 22/6: ruteo a busqueda estructurada (numeroExplicito)
   },
   {
     id: "T3c",
