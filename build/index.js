@@ -209,12 +209,28 @@ class ChildMcpClient {
 }
 
 // ---------------------------------------------------------------------------
+// Directiva operativa: el hub la expone como `instructions` del server MCP y el
+// cliente (ej. Claude Desktop) la surfacea al modelo al conectar. Corta a
+// proposito. Guia completa: docs/busqueda-jurisprudencia-doctrina.md
+// ---------------------------------------------------------------------------
+const DIRECTIVA_OPERATIVA = [
+    "Directiva de uso profesional (mcp-legal-ar). Fuentes juridicas argentinas para asistir al abogado; no reemplazan su revision.",
+    "- No afirmar nada que no surja de una consulta verificada a estas fuentes. No inventar ni completar citas, fechas, salas ni caratulas.",
+    "- Jurisprudencia: citar solo tras recuperar y leer el fallo completo, no el sumario. Distinguir holding de obiter y mayoria de disidencia. Verificar firmeza: si esta recurrido, es criterio, no cosa juzgada.",
+    "- Normas: verificar vigencia. Nacional -> InfoLEG; Provincia de Buenos Aires -> NormativaPBA; otra provincia sin conector -> NO VERIFICADO.",
+    "- Citas provinciales: incluir el Departamento Judicial.",
+    "- Separar datos extraidos de inferencias. Marcar dudas y fuentes caidas como NO VERIFICADO; el silencio de una herramienta no es 'sin novedades'.",
+    "- Anonimizar datos personales antes de resumir PDFs de expedientes.",
+    "- No redactar la conclusion profesional final: entregar un borrador revisable por el abogado.",
+].join("\n");
+
+// ---------------------------------------------------------------------------
 // Servidor principal
 // ---------------------------------------------------------------------------
 async function main() {
     const server = new Server(
         { name: "mcp-legal-ar", version: "2.1.0" },
-        { capabilities: { tools: {} } }
+        { capabilities: { tools: {} }, instructions: DIRECTIVA_OPERATIVA }
     );
 
     process.stderr.write("[mcp-legal-ar] iniciando conectores...\n");
