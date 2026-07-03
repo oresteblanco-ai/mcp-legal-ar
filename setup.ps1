@@ -106,6 +106,19 @@ try {
     Pop-Location
 }
 
+# saij-mcp (tiene su propio package.json; sin esto el conector SAIJ no levanta)
+$saijMcpPath = Join-Path $repoPath "servers\saij-mcp"
+if (Test-Path (Join-Path $saijMcpPath "package.json")) {
+    Push-Location $saijMcpPath
+    try {
+        Write-Host "  > npm install (saij-mcp)..." -ForegroundColor Gray
+        $env:PUPPETEER_SKIP_DOWNLOAD = "true"
+        npm install --prefer-offline 2>&1 | Out-Null
+    } finally {
+        Pop-Location
+    }
+}
+
 Write-Host "[OK] Dependencias instaladas." -ForegroundColor Green
 
 # -------------------------------------------------------

@@ -83,6 +83,12 @@ cd "$REPO_DIR/servers/legal-mcp"
 echo "  > npm install (legal-mcp)..."
 npm install --prefer-offline --silent
 
+if [ -f "$REPO_DIR/servers/saij-mcp/package.json" ]; then
+    cd "$REPO_DIR/servers/saij-mcp"
+    echo "  > npm install (saij-mcp)..."
+    npm install --prefer-offline --silent
+fi
+
 cd "$REPO_DIR"
 echo "[OK] Dependencias instaladas."
 

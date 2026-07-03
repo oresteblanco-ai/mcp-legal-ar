@@ -68,6 +68,14 @@ Claude Desktop
 
 ---
 
+## Uso profesional
+
+El hub acerca fuentes oficiales, no reemplaza la revisión del abogado. La directiva operativa de uso (estados de confianza, verificación antes de citar, anonimización) viaja en el propio código y se expone vía `instructions` del MCP: se carga sola al conectar, no hace falta leer un archivo aparte.
+
+El método completo está en la guía [Búsqueda de jurisprudencia y doctrina](docs/busqueda-jurisprudencia-doctrina.md): de las voces al fallo, control de vigencia y firmeza, y cómo llevar el hallazgo a la pieza.
+
+---
+
 ## Requisitos
 
 Antes de instalar, necesitás tener en tu computadora:
@@ -117,6 +125,7 @@ Hacer clic en el botón verde **Code** arriba a la derecha y seleccionar **Downl
 cd C:\mcp-legal-ar
 npm install
 npm install --prefix servers\legal-mcp
+npm install --prefix servers\saij-mcp
 ```
 
 **Mac / Linux** - Abrir Terminal y ejecutar:
@@ -125,6 +134,7 @@ npm install --prefix servers\legal-mcp
 cd ~/mcp-legal-ar
 npm install
 npm install --prefix servers/legal-mcp
+npm install --prefix servers/saij-mcp
 ```
 
 ### Paso 3 - Configurar Claude Desktop
