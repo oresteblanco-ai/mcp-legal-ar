@@ -34,3 +34,17 @@ RETEST_*.md
 
 # Capturas de diagnostico de portales
 _capturas/
+
+# Config personal de Claude Desktop (documentada en el README; no versionar)
+claude_desktop_config.json
+
+# Perfil de navegador de PJN (sesion y cookies personales)
+.pjn-profile/
+
+# Volcados de debug y pruebas ad-hoc
+csjn_*.txt
+csjn_doc*.txt
+csjn_utf8.txt
+csjn_smoke.txt
+csjn_err.txt
+/test_*.mjs

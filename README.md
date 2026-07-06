@@ -172,7 +172,7 @@ Reemplazar `TU_USUARIO` (Windows) con el nombre de usuario real. Abrir el archiv
 ```json
 "mcp-legal-ar": {
   "command": "node",
-  "args": ["C:\\mcp-legal-ar\\build\\index.js"]
+  "args": ["C:\\mcp-legal-ar\\servers\\legal-mcp\\build\\index.js"]
 }
 ```
 
@@ -180,7 +180,7 @@ Reemplazar `TU_USUARIO` (Windows) con el nombre de usuario real. Abrir el archiv
 ```json
 "mcp-legal-ar": {
   "command": "node",
-  "args": ["/Users/TU_USUARIO/mcp-legal-ar/build/index.js"]
+  "args": ["/Users/TU_USUARIO/mcp-legal-ar/servers/legal-mcp/build/index.js"]
 }
 ```
 
@@ -191,13 +191,13 @@ El archivo completo debería quedar así (ejemplo Windows):
   "mcpServers": {
     "mcp-legal-ar": {
       "command": "node",
-      "args": ["C:\\mcp-legal-ar\\build\\index.js"]
+      "args": ["C:\\mcp-legal-ar\\servers\\legal-mcp\\build\\index.js"]
     }
   }
 }
 ```
 
-> **Windows:** usar doble barra invertida `\\` en todas las rutas del JSON. **Mac/Linux:** usar barra simple `/`. La carpeta puede llamarse como quieras; lo que importa es que la ruta en `args` apunte al `build/index.js` de donde extrajiste el repositorio.
+> **Windows:** usar doble barra invertida `\\` en todas las rutas del JSON. **Mac/Linux:** usar barra simple `/`. La carpeta puede llamarse como quieras; lo que importa es que la ruta en `args` apunte al `servers/legal-mcp/build/index.js` de donde extrajiste el repositorio.
 
 ### Paso 4 - Reiniciar Claude Desktop
 

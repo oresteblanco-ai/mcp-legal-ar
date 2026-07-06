@@ -2,7 +2,7 @@
   "mcpServers": {
     "mcp-legal-ar": {
       "command": "node",
-      "args": ["C:\\Users\\Ximena\\mcp-legal-ar\\build\\index.js"]
+      "args": ["C:\\Users\\Ximena\\mcp-legal-ar\\servers\\legal-mcp\\build\\index.js"]
     }
   }
 }

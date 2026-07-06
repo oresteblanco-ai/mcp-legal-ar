@@ -53,7 +53,7 @@ echo "[OK] Node.js $NODE_VERSION encontrado."
 # 2. Detectar ubicacion del repo
 # -------------------------------------------------------
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENTRY_POINT="$REPO_DIR/build/index.js"
+ENTRY_POINT="$REPO_DIR/servers/legal-mcp/build/index.js"
 
 echo "[OK] Repositorio encontrado en: $REPO_DIR"
 

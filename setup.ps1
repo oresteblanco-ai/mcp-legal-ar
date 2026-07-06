@@ -61,7 +61,7 @@ Write-Host "[OK] Node.js $nodeVersion encontrado." -ForegroundColor Green
 # 2. Detectar ubicacion del repo (donde esta este script)
 # -------------------------------------------------------
 $repoPath = $PSScriptRoot
-$entryPoint = Join-Path $repoPath "build\index.js"
+$entryPoint = Join-Path $repoPath "servers\legal-mcp\build\index.js"
 
 Write-Host "[OK] Repositorio encontrado en: $repoPath" -ForegroundColor Green
 
