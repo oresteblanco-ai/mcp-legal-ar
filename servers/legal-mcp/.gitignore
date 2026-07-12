@@ -1,11 +1,15 @@
 # Dependencias
 node_modules/
 
-# Build
-build/
+# OJO: build/ NO se ignora. En este repo build/ NO es codigo compilado: es el
+# codigo FUENTE de los conectores (los .js viven ahi). Si se ignora, cada conector
+# nuevo hay que meterlo con `git add -f`, lo que es facil de olvidar. Los datos
+# locales que si van dentro de build/ (perfiles de navegador) se excluyen abajo.
 
-# Datos locales
+# Datos locales y perfiles de navegador (sesiones/cookies personales)
 data/
+build/.mev-profile/
+build/data/
 
 # Logs y diagnostico
 *.log
