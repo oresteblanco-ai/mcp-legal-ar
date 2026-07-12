@@ -1,6 +1,6 @@
 # mcp-legal-ar
 
-14 conectores jurídicos argentinos integrados en uno solo. Sin servidores externos de terceros. 100% local. Código abierto y auditable.
+15 conectores jurídicos argentinos integrados en uno solo. Sin servidores externos de terceros. 100% local. Código abierto y auditable.
 
 ---
 
@@ -22,8 +22,9 @@ Claude Desktop puede conectarse a bases de datos externas a través de conectore
 - **PJN Consulta** - Estado procesal de expedientes ante el fuero federal, con búsqueda por parte demandada vía sesión de navegador (captcha resuelto por el usuario).
 - **Portal PJN** - Feed de novedades del abogado logueado (despachos y cédulas de todas sus causas) y descarga del PDF de cada evento, vía API del Poder Judicial de la Nación. Requiere login del usuario (sesión HITL por SSO).
 - **JusCABA** - Expediente Judicial Electrónico (EJE) de la Justicia de la Ciudad de Buenos Aires: consulta de causas por parte, número o CUIJ, con encabezado, ficha, partes, actuaciones, verificación de sentencia y descarga de PDF. Acceso público, sin login ni captcha.
+- **MEV** - Mesa de Entradas Virtual de la Suprema Corte de la Provincia de Buenos Aires: consulta de expedientes por carátula, sets de causas (incluido el de causas con autorización, para fuero penal/familia), actuaciones (pasos procesales) y texto del proveído. Requiere credenciales del abogado (usuario/clave MEV por variable de entorno).
 
-Sin este hub, cada fuente requeriría instalar y configurar un conector por separado. Con este hub, se instala uno solo y las 14 fuentes quedan disponibles al mismo tiempo.
+Sin este hub, cada fuente requeriría instalar y configurar un conector por separado. Con este hub, se instala uno solo y las 15 fuentes quedan disponibles al mismo tiempo.
 
 Este repositorio no crea ninguna fuente nueva. Unifica conectores desarrollados por la comunidad argentina de legal tech; el mérito de cada uno corresponde a sus autores originales.
 
@@ -49,7 +50,8 @@ Claude Desktop
            ├── pjnjuris__*     → proceso hijo Node (API REST + captcha HITL)
            ├── portalpjn__*    → proceso hijo Node (feed de novedades, HITL + SSO)
            ├── juscaba__*      → proceso hijo Node (API REST pública del EJE CABA)
-           └── csjn__*         → proceso hijo Node (sumarios CSJN, fetch directo con sesión)
+           ├── csjn__*         → proceso hijo Node (sumarios CSJN, fetch directo con sesión)
+           └── mev__*          → proceso hijo Node (expedientes MEV/SCBA, ASP + login por form)
 ```
 
 ---
@@ -199,6 +201,64 @@ El archivo completo debería quedar así (ejemplo Windows):
 
 > **Windows:** usar doble barra invertida `\\` en todas las rutas del JSON. **Mac/Linux:** usar barra simple `/`. La carpeta puede llamarse como quieras; lo que importa es que la ruta en `args` apunte al `servers/legal-mcp/build/index.js` de donde extrajiste el repositorio.
 
+#### Acceso al conector MEV (opcional)
+
+El conector **MEV** (Mesa de Entradas Virtual de la SCBA) es el único que necesita que te loguees, porque la MEV no tiene consulta anónima. Tiene **dos modos**, elegís uno:
+
+**Modo A - HITL (sin guardar la clave).** No configurás nada. Cuando uses una tool del MEV, pedile a Claude que abra el navegador (`iniciar_hitl_browser`): se abre una ventana de Chromium en la MEV donde te logueás a mano (Chrome autocompleta con tu gestor de contraseñas). El conector toma la sesión del navegador; tu clave nunca pasa por él ni se guarda en ningún archivo. Es como funciona el conector del Portal PJN. Ideal para uso interactivo desde Claude Desktop.
+
+**Modo B - credenciales (login automático).** Si preferís que entre solo, sin abrir ventana, hay dos formas de darle las credenciales:
+
+*Forma fácil - archivo `.env`* (recomendada): creá un archivo llamado `.env` en la raíz del repo (`mcp-legal-ar\.env`) con una línea por dato, y listo. No hay que tocar el JSON de Claude Desktop:
+
+```
+MEV_USUARIO=tu_usuario_mev
+MEV_CLAVE=tu_clave_mev
+MEV_DEPTO_REGISTRADO=aa
+PJN_USER=tu_usuario_pjn
+PJN_PASS=tu_clave_pjn
+```
+
+El hub lo lee al arrancar. El `.env` es local y está en `.gitignore`: nunca se sube. Es el mismo formato que usa el resto del stack.
+
+*Forma alternativa - bloque `"env"` en el JSON.* Si preferís, agregá tus datos como variables de entorno dentro de la config de Claude Desktop con `"env"`:
+
+```json
+"mcp-legal-ar": {
+  "command": "node",
+  "args": ["C:\\mcp-legal-ar\\servers\\legal-mcp\\build\\index.js"],
+  "env": {
+    "MEV_USUARIO": "tu_usuario_mev",
+    "MEV_CLAVE": "tu_clave_mev",
+    "MEV_DEPTO_REGISTRADO": "aa"
+  }
+}
+```
+
+`MEV_DEPTO_REGISTRADO` es el departamento donde registraste tu usuario MEV; `aa` = "Todos los Deptos" (lo habitual). En este modo la clave queda en texto plano en el config local de tu máquina: protegé ese archivo y no lo compartas. La MEV fuerza el cambio de clave cada 90 días: cuando eso pase, actualizá `MEV_CLAVE` acá. Si no configurás nada, los demás 14 conectores funcionan igual y el MEV usa el modo A.
+
+#### Acceso al conector EJE / JusCABA (opcional)
+
+El conector **JusCABA** funciona sin login para causas públicas. Si querés que vea además **tu cartera** ("Mis Causas") y las causas **reservadas** (penal/PCyF) donde sos parte o letrado, dale acceso de una de dos formas:
+
+- **Credenciales** (login automático): en el `.env` o en `"env"`, `EJE_USUARIO` y `EJE_CLAVE`. El conector detecta la vía según el usuario: si es **CUIT** (numérico) hace el login directo del EJE; si es **email** (como el de **miBA**) automatiza el flujo "Ingresar con miBA" por vos. `EJE_HEADLESS=1` para que no abra ventana. Si miBA pide captcha/2FA, el automático se traba y conviene el modo HITL. **Aviso:** la clave de miBA es la identidad del Gobierno de la Ciudad (da acceso a muchos servicios, no solo judiciales); guardala con cuidado.
+- **HITL** (sin guardar la clave): pedile a Claude `iniciar_hitl_browser` del EJE, te logueás en la ventana como entrás siempre (incluido miBA), y usás `mis_causas`. Tu clave no pasa por el conector.
+
+Sin ninguna de las dos, el JusCABA sigue funcionando en modo público (solo causas públicas).
+
+#### Acceso al conector Portal PJN (opcional)
+
+El conector **Portal PJN** (feed de novedades del abogado) también tiene los dos modos. Por default es HITL: le pedís a Claude `iniciar_hitl_browser`, te logueás en el SSO y listo (tu clave nunca pasa por el conector). Si preferís login automático sin abrir ventana, agregá `PJN_USER` y `PJN_PASS` al mismo bloque `"env"`:
+
+```json
+"env": {
+  "PJN_USER": "tu_usuario_pjn",
+  "PJN_PASS": "tu_clave_pjn"
+}
+```
+
+Aviso importante: la clave del PJN es la llave a **todos** tus expedientes y queda en texto plano en el config local. Además, el SSO del PJN a veces pide captcha o segundo factor, que el login automático no puede resolver — en ese caso se completa el usuario/clave y tenés que destrabar vos en la ventana. Para que el navegador no se abra (uso desatendido real), agregá `"PJN_HEADLESS": "1"`. Si no configurás nada, el PJN usa el modo HITL normal.
+
 ### Paso 4 - Reiniciar Claude Desktop
 
 **Windows:** hacer clic derecho en el ícono de la bandeja del sistema (esquina inferior derecha) y seleccionar **Salir**. Volver a abrir Claude Desktop.
@@ -282,8 +342,9 @@ Algunos conectores dependen de que las webs oficiales estén disponibles. Si una
 | 10 | **SAIJ** | Sistema Argentino de Información Jurídica (jurisprudencia, legislación, doctrina y dictámenes; 330.000+ documentos) | 12 | [Joaquin Escalante](https://github.com/) (reparado 10/6/26: el término de búsqueda va en `r`, no en `s`) |
 | 11 | **PJN Jurisprudencia** | Sumarios de fallos de cámaras nacionales y federales (Sistema de Jurisprudencia del Consejo de la Magistratura, sj.pjn.gov.ar) | 26 | reescritura propia 10/6/26 (API REST + captcha inyectado vía HITL) |
 | 12 | **Portal PJN** | Feed de novedades del abogado logueado (despachos D y cédulas N de todas sus causas) + descarga del PDF de cada evento, vía API REST de api.pjn.gov.ar. Login siempre del usuario (HITL, SSO). No presenta escritos por diseño. Ver `docs/portalpjn-api.md` | 7 | desarrollo propio 11/6/26 (API capturada en vivo) |
-| 13 | **JusCABA** | Expediente Judicial Electrónico (EJE) de la Justicia de la Ciudad de Buenos Aires: consulta de causas por parte/número/CUIJ, encabezado, ficha, fuero, partes, actuaciones, verificación de sentencia y descarga de PDF. Acceso público sin login ni captcha | 12 | desarrollo propio 22/6/26 (API del EJE capturada por reconocimiento) |
+| 13 | **JusCABA** | Expediente Judicial Electrónico (EJE) de la Justicia de la Ciudad de Buenos Aires: consulta de causas por parte/número/CUIJ, encabezado, ficha, fuero, partes, actuaciones, verificación de sentencia y descarga de PDF. Acceso público sin login; capa autenticada opcional (credenciales Keycloak o HITL) para "Mis Causas" y las causas reservadas del abogado | 16 | desarrollo propio 22/6/26 (API del EJE capturada por reconocimiento; auth jul-2026) |
 | 14 | **CSJN** | Sumarios de jurisprudencia de la Corte Suprema de Justicia de la Nación (Secretaría de Jurisprudencia, 1863-2026): búsqueda por texto/carátula/fecha/tomo de Fallos, análisis documental del fallo (competencia, recurso, sentido, remisión, voces, normas, ministros) y enlace al PDF. Acceso público sin login | 3 | desarrollo propio 24/6/26 (API de sjconsulta.csjn.gov.ar capturada por reconocimiento) |
+| 15 | **MEV** | Mesa de Entradas Virtual de la Suprema Corte de la Provincia de Buenos Aires (mev.scba.gov.ar): consulta de expedientes por carátula, sets de causas (incluido el de causas con autorización, para fuero penal/familia reservado), listado de departamentos y organismos, actuaciones (pasos procesales) y texto del proveído. ASP con login por formulario y sesión por cookie; parseo HTML. Requiere credenciales del abogado (MEV_USUARIO/MEV_CLAVE por entorno) | 9 | desarrollo propio jul-2026 (portal capturado por reconocimiento) |
 
 ---
 
@@ -308,7 +369,7 @@ La mayoría de los conectores son servidores MCP de terceros; el mérito de cada
 
 - BORA, BOPBA, InfoLeg, Normativa PBA, JUBA, PTN, TFN, PJN Consulta, PJN Jurisprudencia - [Voftec](https://github.com/voftec) *(repositorios originales bajo licencia MIT; ya no disponibles públicamente — ver nota de licencias abajo)*
 - SCBA MCP Server - [FacundoEmanuel](https://github.com/FacundoEmanuel)
-- Portal PJN, JusCABA y CSJN - desarrollo propio de [@abogadoaboitiz](https://x.com/abogadoaboitiz), sin derivar de código de terceros: Portal PJN sobre la API REST de api.pjn.gov.ar; JusCABA sobre la API pública del EJE (eje.juscaba.gob.ar); CSJN sobre la API de la Secretaría de Jurisprudencia (sjconsulta.csjn.gov.ar). Las reescrituras de PJN Consulta y PJN Jurisprudencia, sobre la estructura original de Voftec, también son propias.
+- Portal PJN, JusCABA, CSJN y MEV - desarrollo propio de [@abogadoaboitiz](https://x.com/abogadoaboitiz), sin derivar de código de terceros: Portal PJN sobre la API REST de api.pjn.gov.ar; JusCABA sobre la API pública del EJE (eje.juscaba.gob.ar); CSJN sobre la API de la Secretaría de Jurisprudencia (sjconsulta.csjn.gov.ar); MEV sobre el portal de la Mesa de Entradas Virtual de la SCBA (mev.scba.gov.ar). Las reescrituras de PJN Consulta y PJN Jurisprudencia, sobre la estructura original de Voftec, también son propias.
 
 Ensamblado por [@abogadoaboitiz](https://x.com/abogadoaboitiz)
 

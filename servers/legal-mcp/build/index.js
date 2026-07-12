@@ -4,6 +4,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextpro
 import { spawn, execSync } from "child_process";
 import * as readline from "readline";
 import * as path from "path";
+import * as fs from "fs";
 import { fileURLToPath } from "url";
 
 // ---------------------------------------------------------------------------
@@ -16,6 +17,32 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..", "..", "..");          // raiz del repo
 const LEGAL_MCP = path.join(ROOT, "servers", "legal-mcp");
 const SAIJ_DIR  = path.join(ROOT, "servers", "saij-mcp");
+
+// ---------------------------------------------------------------------------
+// Credenciales por archivo .env (opcional, mismo formato que el resto del stack):
+// un KEY=VALUE por linea en <repo>/.env (o servers/legal-mcp/.env). Sirve para no
+// tener que editar el JSON de Claude Desktop. Solo el conector MEV y el modo
+// credenciales del Portal PJN lo usan (MEV_USUARIO/MEV_CLAVE, PJN_USER/PJN_PASS,
+// etc.). Las variables ya presentes en el entorno (JSON "env") tienen prioridad.
+// El .env esta en .gitignore: nunca se sube al repo.
+// ---------------------------------------------------------------------------
+function cargarEnvFile(p) {
+    try {
+        if (!fs.existsSync(p)) return;
+        for (const linea of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
+            const m = linea.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+            if (!m) continue; // ignora comentarios (#...) y lineas vacias
+            let v = m[2];
+            if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+            if (process.env[m[1]] === undefined) process.env[m[1]] = v;
+        }
+        process.stderr.write(`[mcp-legal-ar] credenciales cargadas de ${p}\n`);
+    } catch (e) {
+        process.stderr.write(`[mcp-legal-ar] no se pudo leer ${p}: ${e.message}\n`);
+    }
+}
+cargarEnvFile(process.env.MCP_LEGAL_ENV_FILE || path.join(ROOT, ".env"));
+cargarEnvFile(path.join(LEGAL_MCP, ".env"));
 // process.execPath puede apuntar a una ruta inexistente en nvm/fnm;
 // buscamos node en PATH como fallback seguro.
 function resolveNode() {
@@ -46,12 +73,15 @@ const TIMEOUTS = {
     // portalpjn HITL: arranque de Chromium + login del usuario en SSO +
     // posible reload para renovar token.
     portalpjn: 90000,
-    // juscaba: descargas binarias de sentencias; tope mayor al default de 20s
-    // pero acotado (el AbortController del conector corta a los 60s).
-    juscaba:  60000,
+    // juscaba: descargas binarias de sentencias, y el auto-login miBA (arranque de
+    // Chromium + login federado + redirect) que la primera vez puede pasar los 60s.
+    juscaba:  90000,
     // csjn: flujo stateful de 3 pasos (GET consulta + POST buscar + GET paginar)
     // y, segun maxResultados, varias paginas encadenadas. Tope holgado.
     csjn:     45000,
+    // mev: ASP con login por form + sesion por cookie + parseo HTML de listados
+    // paginados. Login + POSLoguin + consulta encadenados; tope holgado.
+    mev:      60000,
 };
 
 // ---------------------------------------------------------------------------
@@ -100,6 +130,13 @@ const CONNECTORS = [
     // paginarSumarios). Pasa el WAF via stack TLS nativo de Node/Windows.
     // 3 tools. Recon en vivo 24/06/2026 (ver RECON_CSJN_2026-06-24.md).
     { prefix: "csjn",         command: NODE, args: [path.join(LEGAL_MCP, "build", "csjn.js")],         cwd: LEGAL_MCP },
+    // mev NUEVO jul-2026 (conector 15): Mesa de Entradas Virtual de la SCBA
+    // (mev.scba.gov.ar), consulta de EXPEDIENTES de la Provincia de Buenos Aires.
+    // ASP con login por form + sesion por cookie; parseo HTML con cheerio. REQUIERE
+    // credenciales del abogado por env (MEV_USUARIO/MEV_CLAVE/MEV_DEPTO_REGISTRADO).
+    // Fuero penal/familia: reservados, via set 'Lista de Causas con AUTORIZACION'.
+    // Distinto de `scba` (jurisprudencia) y `juba` (jurisprudencia bonaerense).
+    { prefix: "mev",          command: NODE, args: [path.join(LEGAL_MCP, "build", "mev.js")],          cwd: LEGAL_MCP },
 ];
 
 class ChildMcpClient {

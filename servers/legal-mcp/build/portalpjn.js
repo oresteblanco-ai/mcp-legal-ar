@@ -13,10 +13,17 @@
  *   El detalle del expediente NO tiene API (deriva a pjn-scw, JSF+ViewState):
  *   para eso esta el conector `pjn` (HITL sobre scw).
  *
- * REGLA INMODIFICABLE (HITL): el login en el SSO (sso.pjn.gov.ar, OIDC+PKCE) lo
- * hace SIEMPRE el usuario en un navegador visible. El conector jamas ve, pide
- * ni persiste credenciales; solo reusa el Bearer que la propia SPA emite, leido
- * de los requests que la pagina ya hace. El token no se escribe a disco.
+ * LOGIN - DOS MODOS:
+ *   A) HITL (default): el usuario se loguea a mano en el SSO (sso.pjn.gov.ar,
+ *      OIDC+PKCE) en un navegador visible. El conector no ve ni pide credenciales;
+ *      solo reusa el Bearer que la propia SPA emite. Es el modo mas seguro.
+ *   B) CREDENCIALES por entorno (PJN_USER/PJN_PASS): el conector rellena el login
+ *      del SSO por vos. Sirve para uso desatendido. AVISO: la clave del PJN es la
+ *      llave a TODOS tus expedientes y queda en el config local; ademas el SSO
+ *      puede pedir captcha/2FA, que el login automatico no resuelve (ahi cae al
+ *      modo A: se completa el usuario/clave y esperas que el usuario destrabe).
+ *   El token nunca se escribe a disco; en modo B la clave se lee de env, se tipea
+ *      en el form del SSO y no se persiste. PJN_HEADLESS=1 fuerza navegador oculto.
  *
  * PRESENTACION DE ESCRITOS: fuera de alcance POR DISEÑO. Presentar es acto
  * procesal del abogado; este conector es de lectura.
@@ -70,8 +77,63 @@ function instalarCapturaToken(page) {
     });
 }
 
+// ─── modo credenciales (B) ───────────────────────────────────────────────────
+const hayCredencialesPjn = () => !!(process.env.PJN_USER && process.env.PJN_PASS);
+
+// Lanza el navegador con perfil persistente e instala la captura del token.
+// visible=false solo si PJN_HEADLESS lo fuerza (el captcha necesita ventana visible).
+async function abrirNavegador() {
+    const { default: puppeteer } = await import("puppeteer");
+    fs.mkdirSync(PROFILE_DIR, { recursive: true });
+    const headless = /^(1|true)$/i.test(process.env.PJN_HEADLESS || "");
+    globalBrowser = await puppeteer.launch({
+        headless,
+        defaultViewport: null,
+        userDataDir: PROFILE_DIR,
+        args: headless ? [] : ["--start-maximized"],
+    });
+    globalPage = (await globalBrowser.pages())[0] || (await globalBrowser.newPage());
+    instalarCapturaToken(globalPage);
+}
+
+// Si la pagina esta en el login del SSO y hay credenciales, las tipea. Best-effort:
+// si hay captcha/2FA o cambia el formulario, no rompe (el usuario destraba en modo A).
+async function intentarLoginAutomatico() {
+    if (!hayCredencialesPjn() || !pageViva()) return false;
+    if (!globalPage.url().includes("sso.pjn.gov.ar")) return false;
+    try {
+        await globalPage.waitForSelector("#username", { timeout: 15000 });
+        await globalPage.type("#username", String(process.env.PJN_USER), { delay: 15 });
+        await globalPage.type("#password", String(process.env.PJN_PASS), { delay: 15 });
+        await Promise.all([
+            globalPage.click("#kc-login").catch(() => globalPage.keyboard.press("Enter")),
+            globalPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => { }),
+        ]);
+        return true;
+    } catch {
+        return false; // captcha, 2FA o form distinto: queda para que el usuario destrabe
+    }
+}
+
+// Abre el navegador y consigue token de forma automatica (modo B). Reusa la sesion
+// del perfil persistente si sigue viva; si cae al SSO, tipea las credenciales.
+async function autoLoginConCredenciales() {
+    if (!pageViva()) await abrirNavegador();
+    await globalPage.goto(HOME_URL, { waitUntil: "domcontentloaded", timeout: 90000 });
+    for (let i = 0; i < 12 && !auth.token; i++) await sleep(1000); // sesion del perfil?
+    if (auth.token) return;
+    await intentarLoginAutomatico();
+    for (let i = 0; i < 20 && !auth.token; i++) await sleep(1000);
+}
+
 async function asegurarToken() {
-    if (!pageViva()) throw new Error(AVISO_SIN_SESION);
+    // Modo B: sin navegador pero con credenciales -> login automatico.
+    if (!pageViva() && hayCredencialesPjn()) {
+        try { await autoLoginConCredenciales(); } catch { /* cae al aviso de abajo */ }
+    }
+    if (!pageViva()) throw new Error(hayCredencialesPjn()
+        ? "No se pudo abrir sesion automatica con PJN_USER/PJN_PASS (posible captcha/2FA del SSO). Proba el modo HITL: iniciar_hitl_browser y logueate a mano."
+        : AVISO_SIN_SESION);
     if (auth.token && Date.now() - auth.ts < TOKEN_FRESCO_MS) return auth.token;
     // Token ausente o viejo: recargar la pagina dispara las llamadas de la SPA
     // (con token renovado por Keycloak) y la captura lo levanta.
@@ -156,22 +218,20 @@ server.tool(
         }
         if (pageViva()) return txt("El navegador ya esta abierto; la sesion sigue viva.");
         try {
-            const { default: puppeteer } = await import("puppeteer");
-            fs.mkdirSync(PROFILE_DIR, { recursive: true });
-            globalBrowser = await puppeteer.launch({
-                headless: false,
-                defaultViewport: null,
-                userDataDir: PROFILE_DIR, // perfil persistente: SSO + clave guardada
-                args: ["--start-maximized"],
-            });
-            globalPage = (await globalBrowser.pages())[0] || (await globalBrowser.newPage());
-            instalarCapturaToken(globalPage);
+            await abrirNavegador();
             await globalPage.goto(HOME_URL, { waitUntil: "domcontentloaded", timeout: 90000 });
             // El SSO con cookie valida redirige solo al portal: esperar un poco
             // y ver si el token ya cayo sin intervencion del usuario.
             for (let i = 0; i < 12 && !auth.token; i++) await sleep(1000);
             if (auth.token) {
                 return txt("Navegador abierto y SESION RECUPERADA del perfil persistente: el usuario ya esta logueado, no hace falta clave. Podes llamar directo a obtener_novedades o parte_diario.");
+            }
+            // Modo B: si hay credenciales y cayo al SSO, se completa el login solo.
+            if (hayCredencialesPjn() && globalPage.url().includes("sso.pjn.gov.ar")) {
+                await intentarLoginAutomatico();
+                for (let i = 0; i < 20 && !auth.token; i++) await sleep(1000);
+                if (auth.token) return txt("Navegador abierto y login AUTOMATICO hecho con PJN_USER/PJN_PASS. Podes llamar directo a obtener_novedades o parte_diario.");
+                return txt("Navegador abierto y se intento el login automatico (PJN_USER/PJN_PASS), pero no cayo el token: puede haber captcha/2FA. Decile al usuario que destrabe el login en la ventana y avise con un ok.");
             }
             const enSSO = globalPage.url().includes("sso.pjn.gov.ar");
             return txt(
@@ -336,15 +396,20 @@ server.tool("alcance_fuente", "Capacidades, flujo HITL y limitaciones del conect
 Feed de novedades del abogado logueado (despachos D y cedulas N de TODAS sus
 causas, via API REST api.pjn.gov.ar) y descarga del PDF de cada evento.
 
-## Flujo
-1. iniciar_hitl_browser (avisar al usuario ANTES; aviso_dado=true).
-2. El usuario se loguea en el SSO (sus credenciales, nunca del conector).
-3. obtener_novedades / parte_diario / descargar_pdf_evento.
-4. finalizar_hitl_browser al terminar.
+## Login - dos modos
+- MODO A (HITL, default): iniciar_hitl_browser (avisar al usuario ANTES;
+  aviso_dado=true), el usuario se loguea a mano en el SSO, y luego
+  obtener_novedades / parte_diario / descargar_pdf_evento. finalizar al terminar.
+- MODO B (credenciales): si estan PJN_USER y PJN_PASS en el entorno, el conector
+  hace el login solo (llamando cualquier tool de consulta directamente, sin abrir
+  ventana salvo captcha). PJN_HEADLESS=1 oculta el navegador. La clave del PJN da
+  acceso a TODOS los expedientes y queda en el config local: usar con criterio.
+  Si el SSO pide captcha/2FA, el modo B cae al A (se completa usuario/clave y el
+  usuario destraba en la ventana).
 
 ## Limitaciones (por diseño y del portal)
-- Sin sesion del usuario no hay datos: el token Bearer se captura de la propia
-  SPA, vive solo en memoria y se renueva recargando la pagina.
+- Sin sesion (ni credenciales) no hay datos: el token Bearer se captura de la
+  propia SPA, vive solo en memoria y se renueva recargando la pagina.
 - El DETALLE del expediente no tiene API (deriva a pjn-scw/JSF): usar el
   conector pjn (consultar_expediente) con la clave del feed.
 - NO presenta escritos ni lo hara: acto procesal del abogado.

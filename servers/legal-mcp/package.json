@@ -1,7 +1,7 @@
 {
   "name": "legal-mcp",
   "version": "2.1.0",
-  "description": "Conectores MCP para fuentes juridicas argentinas (BORA, BOPBA, InfoLeg, Normativa PBA, JUBA, PJN, PTN, TFN, SCBA)",
+  "description": "Conectores MCP para fuentes juridicas argentinas (BORA, BOPBA, InfoLeg, Normativa PBA, JUBA, PJN, PJN Jurisprudencia, Portal PJN, PTN, TFN, SCBA, SAIJ, JusCABA, CSJN, MEV)",
   "type": "module",
   "scripts": {
     "start": "node build/index.js"
