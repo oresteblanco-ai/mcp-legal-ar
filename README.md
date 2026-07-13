@@ -74,7 +74,7 @@ Claude Desktop
 
 El hub acerca fuentes oficiales, no reemplaza la revisión del abogado. La directiva operativa de uso (estados de confianza, verificación antes de citar, anonimización) viaja en el propio código y se expone vía `instructions` del MCP: se carga sola al conectar, no hace falta leer un archivo aparte.
 
-El método completo está en la guía [Búsqueda de jurisprudencia y doctrina](docs/busqueda-jurisprudencia-doctrina.md): de las voces al fallo, control de vigencia y firmeza, y cómo llevar el hallazgo a la pieza.
+Esa misma directiva, en versión legible y ampliada, está en [`docs/directiva-operativa.md`](docs/directiva-operativa.md): la capa corta de control -regla de integridad, estados de confianza (VERIFICADO, REFERENCIA VERIFICADA, INFERIDO, NO VERIFICADO PARCIAL, NO VERIFICADO, CONFLICTO), verificación mínima antes de citar, matriz de omisiones, anonimización y registro-. El método completo -de las voces al fallo, control de vigencia y firmeza, y cómo llevar el hallazgo a la pieza- está en [`docs/busqueda-jurisprudencia-doctrina.md`](docs/busqueda-jurisprudencia-doctrina.md).
 
 ---
 
