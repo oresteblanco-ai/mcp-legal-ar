@@ -1,0 +1,25 @@
+# Normalizacion de fin de linea
+# ---------------------------------------------------------------------------
+# Sin esto, en Windows git marca archivos como "modificados" aunque no los hayas
+# tocado (CRLF en tu disco vs LF en el repo) y avisa "LF will be replaced by CRLF"
+# en cada commit. Con esta config, el repo guarda LF y el checkout se adapta solo.
+
+* text=auto eol=lf
+
+# Scripts de Windows: necesitan CRLF para ejecutarse sin problemas
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Scripts de shell: siempre LF
+*.sh text eol=lf
+
+# Binarios: que git no los toque
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.xlsx binary
+*.zip binary
